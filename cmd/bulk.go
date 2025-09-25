@@ -8,13 +8,11 @@ import (
 	"errors"
 	"fmt"
 
-	"os"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 
 	"github.com/elastic/elastic-package/internal/cobraext"
 	// "github.com/elastic/elastic-package/internal/formatter"
+	"github.com/elastic/elastic-package/internal/packages"
 )
 
 const (
@@ -42,36 +40,6 @@ func setupBulkCommand() *cobraext.Command {
 	return cobraext.NewCommand(cmd, cobraext.ContextPackage)
 }
 
-// FindPackageRoot finds and returns the path to the root folder of a package from the working directory.
-func FindPackagesRoot() (string, bool, error) {
-	workDir, err := os.Getwd()
-	if err != nil {
-		return "", false, fmt.Errorf("locating working directory failed: %w", err)
-	}
-	return FindPackagesRootFrom(workDir)
-}
-
-func FindPackagesRootFrom(fromDir string) (string, bool, error) {
-	// VolumeName() will return something like "C:" in Windows, and "" in other OSs
-	// rootDir will be something like "C:\" in Windows, and "/" everywhere else.
-	rootDir := filepath.VolumeName(fromDir) + string(filepath.Separator)
-
-	dir := fromDir
-	for dir != "." {
-		path := filepath.Join(dir, PackagesDirectory)
-		fileInfo, err := os.Stat(path)
-		if err == nil && fileInfo.IsDir() {
-			return path, true, nil
-		}
-
-		if dir == rootDir {
-			break
-		}
-		dir = filepath.Dir(dir)
-	}
-	return "", false, nil
-}
-
 type Manifest struct {
 	Name	string	`yaml:"name"`
 	Title	string	`yaml:"title"`
@@ -91,7 +59,7 @@ func bulkCommandAction(cmd *cobra.Command, args []string) error {
 	// find the packages directory
 	// loop over each directory under packages/
 	// open each manifest and calculate statistics of some things
-	packageRoot, found, err := FindPackagesRoot()
+	packageRoot, found, err := packages.FindPackagesRoot()
 	cmd.Printf("found root %v (%v)\n", packageRoot, found)
 	if err != nil {
 		return fmt.Errorf("locating package root failed: %w", err)

@@ -22,6 +22,9 @@ import (
 )
 
 const (
+	// PackagesDirectory is the name of the directory where all integrations live.
+	PackagesDirectory = "packages"
+
 	// PackageManifestFile is the name of the package's main manifest file.
 	PackageManifestFile = "manifest.yml"
 
@@ -318,6 +321,36 @@ func FindPackageRootFrom(fromDir string) (string, bool, error) {
 			if ok {
 				return dir, true, nil
 			}
+		}
+
+		if dir == rootDir {
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
+	return "", false, nil
+}
+
+// FindPackagesRoot finds and returns the path to the root folder of all packages (path/to/integrations/packages) from the working directory.
+func FindPackagesRoot() (string, bool, error) {
+	workDir, err := os.Getwd()
+	if err != nil {
+		return "", false, fmt.Errorf("locating working directory failed: %w", err)
+	}
+	return FindPackagesRootFrom(workDir)
+}
+
+func FindPackagesRootFrom(fromDir string) (string, bool, error) {
+	// VolumeName() will return something like "C:" in Windows, and "" in other OSs
+	// rootDir will be something like "C:\" in Windows, and "/" everywhere else.
+	rootDir := filepath.VolumeName(fromDir) + string(filepath.Separator)
+
+	dir := fromDir
+	for dir != "." {
+		path := filepath.Join(dir, PackagesDirectory)
+		fileInfo, err := os.Stat(path)
+		if err == nil && fileInfo.IsDir() {
+			return path, true, nil
 		}
 
 		if dir == rootDir {
