@@ -5,18 +5,6 @@
 package packages
 
 import (
-	"archive/zip"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
-
-	"github.com/elastic/go-ucfg"
-	"github.com/elastic/go-ucfg/yaml"
 	int_pkgs "github.com/elastic/elastic-package/internal/packages"
 )
 

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 
 	"github.com/elastic/elastic-package/cmd"
+	_ "github.com/elastic/elastic-package/pkgs/packages"
 	"github.com/elastic/elastic-package/internal/install"
 )
 
