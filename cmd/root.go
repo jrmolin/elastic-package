@@ -27,6 +27,7 @@ var commands = []*cobraext.Command{
 	setupDumpCommand(),
 	setupEditCommand(),
 	setupExportCommand(),
+	setupForeachCommand(),
 	setupFormatCommand(),
 	setupInstallCommand(),
 	setupLinksCommand(),
