@@ -25,6 +25,8 @@ const (
 	cacheDir              = "cache"
 	FieldsCacheName       = "fields"
 	KibanaConfigCacheName = "kibana_config"
+
+	mcpJson = "mcp.json"
 )
 
 var (
@@ -95,6 +97,11 @@ func (loc LocationManager) ServiceOutputDir() string {
 // CacheDir returns the directory with cached fields
 func (loc LocationManager) CacheDir(name string) string {
 	return filepath.Join(loc.stackPath, cacheDir, name)
+}
+
+// CacheDir returns the directory with cached fields
+func (loc LocationManager) MCPJson() string {
+	return filepath.Join(loc.stackPath, mcpJson)
 }
 
 // configurationDir returns the configuration directory location
