@@ -6,16 +6,19 @@ package llmagent
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	_ "embed"
 
+	"github.com/elastic/elastic-package/internal/configuration/locations"
 	"github.com/elastic/elastic-package/internal/docs"
+	"github.com/elastic/elastic-package/internal/environment"
 	"github.com/elastic/elastic-package/internal/logger"
 	"github.com/elastic/elastic-package/internal/packages"
+	"github.com/elastic/elastic-package/internal/profile"
 	"github.com/elastic/elastic-package/internal/tui"
 )
 
@@ -28,15 +31,70 @@ var revisionPrompt string
 //go:embed _static/limit_hit_prompt.txt
 var limitHitPrompt string
 
+// loadPromptFile loads a prompt file from external location if enabled, otherwise uses embedded content
+func loadPromptFile(filename string, embeddedContent string, profile *profile.Profile) string {
+	// Check if external prompt files are enabled
+	envVar := environment.WithElasticPackagePrefix("LLM_EXTERNAL_PROMPTS")
+	configKey := "llm.external_prompts"
+	useExternal := getConfigValue(profile, envVar, configKey, "false") == "true"
+
+	if !useExternal {
+		return embeddedContent
+	}
+
+	// Check in profile directory first if profile is available
+	if profile != nil {
+		profilePath := filepath.Join(profile.ProfilePath, "prompts", filename)
+		if content, err := os.ReadFile(profilePath); err == nil {
+			logger.Debugf("Loaded external prompt file from profile: %s", profilePath)
+			return string(content)
+		}
+	}
+
+	// Try to load from .elastic-package directory
+	loc, err := locations.NewLocationManager()
+	if err != nil {
+		logger.Debugf("Failed to get location manager, using embedded prompt: %v", err)
+		return embeddedContent
+	}
+
+	// Check in .elastic-package directory
+	elasticPackagePath := filepath.Join(loc.RootDir(), "prompts", filename)
+	if content, err := os.ReadFile(elasticPackagePath); err == nil {
+		logger.Debugf("Loaded external prompt file from .elastic-package: %s", elasticPackagePath)
+		return string(content)
+	}
+
+	// Fall back to embedded content
+	logger.Debugf("External prompt file not found, using embedded content for: %s", filename)
+	return embeddedContent
+}
+
+// getConfigValue retrieves a configuration value with fallback from environment variable to profile config
+func getConfigValue(profile *profile.Profile, envVar, configKey, defaultValue string) string {
+	// First check environment variable
+	if envValue := os.Getenv(envVar); envValue != "" {
+		return envValue
+	}
+
+	// Then check profile configuration
+	if profile != nil {
+		return profile.Config(configKey, defaultValue)
+	}
+
+	return defaultValue
+}
+
 // DocumentationAgent handles documentation updates for packages
 type DocumentationAgent struct {
 	agent                 *Agent
 	packageRoot           string
+	profile               *profile.Profile
 	originalReadmeContent *string // Stores original README content for restoration on cancel
 }
 
 // NewDocumentationAgent creates a new documentation agent
-func NewDocumentationAgent(provider LLMProvider, packageRoot string) (*DocumentationAgent, error) {
+func NewDocumentationAgent(provider LLMProvider, packageRoot string, profile *profile.Profile) (*DocumentationAgent, error) {
 	// Create tools for package operations
 	tools := PackageTools(packageRoot)
 
@@ -46,6 +104,7 @@ func NewDocumentationAgent(provider LLMProvider, packageRoot string) (*Documenta
 	return &DocumentationAgent{
 		agent:       agent,
 		packageRoot: packageRoot,
+		profile:     profile,
 	}, nil
 }
 
@@ -353,7 +412,8 @@ func (d *DocumentationAgent) handleRequestChanges() (string, bool, bool, error) 
 
 // buildInitialPrompt creates the initial prompt for the LLM
 func (d *DocumentationAgent) buildInitialPrompt(manifest *packages.PackageManifest) string {
-	return fmt.Sprintf(initialPrompt,
+	promptContent := loadPromptFile("initial_prompt.txt", initialPrompt, d.profile)
+	return fmt.Sprintf(promptContent,
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
@@ -370,7 +430,8 @@ func (d *DocumentationAgent) buildRevisionPrompt(changes string) string {
 		return fmt.Sprintf("Please make the following changes to the documentation:\n\n%s", changes)
 	}
 
-	return fmt.Sprintf(revisionPrompt,
+	promptContent := loadPromptFile("revision_prompt.txt", revisionPrompt, d.profile)
+	return fmt.Sprintf(promptContent,
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
@@ -394,7 +455,8 @@ func (d *DocumentationAgent) handleTokenLimitResponse(originalResponse string) (
 
 // buildSectionBasedPrompt creates a prompt for generating README in sections
 func (d *DocumentationAgent) buildSectionBasedPrompt(manifest *packages.PackageManifest) string {
-	return fmt.Sprintf(limitHitPrompt,
+	promptContent := loadPromptFile("limit_hit_prompt.txt", limitHitPrompt, d.profile)
+	return fmt.Sprintf(promptContent,
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,

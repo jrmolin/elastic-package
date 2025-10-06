@@ -45,7 +45,8 @@ Configuration options for LLM providers (environment variables or profile config
 - GEMINI_MODEL / llm.gemini.model: Model ID (defaults to gemini-2.5-pro)
 - LOCAL_LLM_ENDPOINT / llm.local.endpoint: Endpoint for local LLM server
 - LOCAL_LLM_MODEL / llm.local.model: Model name for local LLM (defaults to llama2)
-- LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional)`
+- LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional)
+- ELASTIC_PACKAGE_LLM_EXTERNAL_PROMPTS / llm.external_prompts: Enable external prompt files (defaults to false)`
 
 // getConfigValue retrieves a configuration value with fallback from environment variable to profile config
 func getConfigValue(profile *profile.Profile, envVar, configKey, defaultValue string) string {
@@ -157,7 +158,7 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create the documentation agent
-	docAgent, err := llmagent.NewDocumentationAgent(provider, packageRoot)
+	docAgent, err := llmagent.NewDocumentationAgent(provider, packageRoot, profile)
 	if err != nil {
 		return fmt.Errorf("failed to create documentation agent: %w", err)
 	}

@@ -106,7 +106,7 @@ func (a *Agent) ExecuteTask(ctx context.Context, prompt string) (*TaskResult, er
 					}
 				} else {
 					if result.Error != "" {
-						toolResultMsg := a.formatToolError(toolCall.Name, fmt.Errorf(result.Error))
+						toolResultMsg := a.formatToolError(toolCall.Name, fmt.Errorf("%s", result.Error))
 						conversation = append(conversation, ConversationEntry{
 							Type:    "tool_result",
 							Content: toolResultMsg,
