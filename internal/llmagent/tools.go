@@ -9,18 +9,16 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
-	"io/ioutil"
-	
+
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/elastic/elastic-package/internal/configuration/locations"
-	"github.com/elastic/elastic-package/internal/packages/archetype"
 )
 
 // The embedded example_readme is an example of a high-quality integration readme, following the static template archetype,
@@ -32,23 +30,25 @@ var (
 	exampleReadmeContent string
 
 	// should these be done per-tool?
-	ctx = context.Background()
+	ctx       = context.Background()
 	transport mcp.Transport
 )
 
 type MCPServer struct {
-	Command *string `json:"command"`
-	Args []string `json:"args"`
-	Env *map[string]string `json:"env"`
-	Url *string `json:"url"`
+	Command *string            `json:"command"`
+	Args    []string           `json:"args"`
+	Env     *map[string]string `json:"env"`
+	Url     *string            `json:"url"`
 	Headers *map[string]string `json:"headers"`
 
 	session *mcp.ClientSession
-	Tools []Tool
+	Tools   []Tool
 }
 
-type MCPServers struct {
-	Inner map[string]MCPServer `json:"mcpServers"`
+type MCPJson struct {
+	InitialPrompt  *string              `json:"initialPromptFile"`
+	RevisionPrompt *string              `json:"revisionPromptFile"`
+	Servers        map[string]MCPServer `json:"mcpServers"`
 }
 
 // need an MCP struct that holds an array of close functions and also an array of tools
@@ -57,7 +57,7 @@ func (s *MCPServer) Connect() error {
 	ctx := context.Background()
 	var transport mcp.Transport
 
-	transport = &mcp.StreamableClientTransport{Endpoint: *(s.Url),}
+	transport = &mcp.StreamableClientTransport{Endpoint: *(s.Url)}
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-client", Version: "v1.0.0"}, nil)
 
@@ -91,8 +91,7 @@ func (s *MCPServer) Connect() error {
 			}
 
 			// pull out the properties and required
-			// 
-
+			//
 
 			required := feat.InputSchema.(map[string]any)["required"]
 			if required == nil {
@@ -102,12 +101,12 @@ func (s *MCPServer) Connect() error {
 			properties := feat.InputSchema.(map[string]interface{})["properties"]
 
 			s.Tools = append(s.Tools, Tool{
-				Name: feat.Name,
+				Name:        feat.Name,
 				Description: feat.Description,
 				Parameters: map[string]interface{}{
-					"type": "object",
+					"type":       "object",
 					"properties": properties,
-					"required": required,
+					"required":   required,
 				},
 				Handler: func(ctx context.Context, arguments string) (*ToolResult, error) {
 					myCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -115,7 +114,7 @@ func (s *MCPServer) Connect() error {
 					res, err := s.session.CallTool(myCtx, &mcp.CallToolParams{Name: feat.Name, Arguments: json.RawMessage(arguments)})
 
 					if err != nil {
-					fmt.Printf("failed to call tool with error %v", err)
+						fmt.Printf("failed to call tool with error %v", err)
 						return nil, err
 					}
 					data, err := json.Marshal(res)
@@ -133,7 +132,7 @@ func (s *MCPServer) Connect() error {
 
 // PackageTools creates the tools available to the LLM for package operations.
 // These tools do not allow access to `docs/`, to prevent the LLM from confusing the generated and non-generated README versions.
-func MCPTools() *MCPServers {
+func MCPTools() *MCPJson {
 	// what MCP servers can we connect to?
 	// the handler will have a connection to the endpoint already established
 	// we will create an mcp.StreamableClientTransport{Endpoint: url} for each endpoint
@@ -157,237 +156,41 @@ func MCPTools() *MCPServers {
 		return nil
 	}
 
-	var mcpServers MCPServers
-	json.Unmarshal(byteValue, &mcpServers)
+	var mcpJson MCPJson
+	json.Unmarshal(byteValue, &mcpJson)
 
 	// handle the url thing only for now
-	for key, value := range mcpServers.Inner {
+	for key, value := range mcpJson.Servers {
 		if value.Url != nil {
 			err = value.Connect()
-			mcpServers.Inner[key] = value
+			mcpJson.Servers[key] = value
 		}
 
 	}
 
-	return &mcpServers
+	return &mcpJson
 }
 
 func PackageTools(packageRoot string) []Tool {
 	return []Tool{
 		{
-			Name:        "list_directory",
-			Description: "List files and directories in a given path within the package",
+			Name:        "get_package_root",
+			Description: "Query the system for the current package root",
 			Parameters: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "Directory path relative to package root (empty string for package root)",
-					},
-				},
-				"required": []string{"path"},
+				"type":       "object",
+				"properties": map[string]interface{}{},
+				"required":   []string{},
 			},
-			Handler: listDirectoryHandler(packageRoot),
+			Handler: getPackageRootHandler(packageRoot),
 		},
-		{
-			Name:        "read_file",
-			Description: "Read the contents of a file within the package.",
-			Parameters: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "File path relative to package root",
-					},
-				},
-				"required": []string{"path"},
-			},
-			Handler: readFileHandler(packageRoot),
-		},
-		{
-			Name:        "write_file",
-			Description: "Write content to a file within the package. This tool can only write in _dev/build/docs/.",
-			Parameters: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "File path relative to package root",
-					},
-					"content": map[string]interface{}{
-						"type":        "string",
-						"description": "Content to write to the file",
-					},
-				},
-				"required": []string{"path", "content"},
-			},
-			Handler: writeFileHandler(packageRoot),
-		},
-		// {
-		// 	Name:        "get_readme_template",
-		// 	Description: "Get the README.md template that should be used as the structure for generating package documentation. This template contains the required sections and format.",
-		// 	Parameters: map[string]interface{}{
-		// 		"type":       "object",
-		// 		"properties": map[string]interface{}{},
-		// 		"required":   []string{},
-		// 	},
-		// 	Handler: getReadmeTemplateHandler(),
-		// },
-		// {
-		// 	Name:        "get_example_readme",
-		// 	Description: "Get a high-quality example README.md that demonstrates the target quality, level of detail, and formatting. Use this as a reference for style and content structure.",
-		// 	Parameters: map[string]interface{}{
-		// 		"type":       "object",
-		// 		"properties": map[string]interface{}{},
-		// 		"required":   []string{},
-		// 	},
-		// 	Handler: getExampleReadmeHandler(),
-		// },
 	}
 }
 
-// listDirectoryHandler returns a handler for the list_directory tool
-func listDirectoryHandler(packageRoot string) ToolHandler {
-	return func(ctx context.Context, arguments string) (*ToolResult, error) {
-		var args struct {
-			Path string `json:"path"`
-		}
-
-		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to parse arguments: %v", err)}, nil
-		}
-
-		// Construct the full path
-		fullPath := filepath.Join(packageRoot, args.Path)
-
-		// Security check: ensure we stay within package root
-		// Use filepath.Clean to resolve any "../" sequences, then check if it's still under packageRoot
-		cleanPath := filepath.Clean(fullPath)
-		cleanRoot := filepath.Clean(packageRoot)
-		relPath, relErr := filepath.Rel(cleanRoot, cleanPath)
-		if relErr != nil || strings.HasPrefix(relPath, "..") {
-			return &ToolResult{Error: "access denied: path outside package root"}, nil
-		}
-
-		entries, err := os.ReadDir(fullPath)
-		if err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to read directory: %v", err)}, nil
-		}
-
-		var result strings.Builder
-		result.WriteString(fmt.Sprintf("Contents of %s:\n", args.Path))
-
-		for _, entry := range entries {
-			// Hide docs/ directory from LLM - it contains generated artifacts
-			if entry.Name() == "docs" {
-				continue
-			}
-
-			if entry.IsDir() {
-				result.WriteString(fmt.Sprintf("  %s/ (directory)\n", entry.Name()))
-			} else {
-				info, err := entry.Info()
-				if err == nil {
-					result.WriteString(fmt.Sprintf("  %s (file, %d bytes)\n", entry.Name(), info.Size()))
-				} else {
-					result.WriteString(fmt.Sprintf("  %s (file)\n", entry.Name()))
-				}
-			}
-		}
-
-		return &ToolResult{Content: result.String()}, nil
-	}
-}
-
-// readFileHandler returns a handler for the read_file tool
-func readFileHandler(packageRoot string) ToolHandler {
-	return func(ctx context.Context, arguments string) (*ToolResult, error) {
-		var args struct {
-			Path string `json:"path"`
-		}
-
-		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to parse arguments: %v", err)}, nil
-		}
-
-		// Block access to generated artifacts in docs/ directory (tool should only work with the template README)
-		if strings.HasPrefix(args.Path, "docs/") {
-			return &ToolResult{Error: "access denied: invalid path"}, nil
-		}
-
-		// Construct the full path
-		fullPath := filepath.Join(packageRoot, args.Path)
-
-		// Security check: ensure we stay within package root
-		// Use filepath.Clean to resolve any "../" sequences, then check if it's still under packageRoot
-		cleanPath := filepath.Clean(fullPath)
-		cleanRoot := filepath.Clean(packageRoot)
-		relPath, relErr := filepath.Rel(cleanRoot, cleanPath)
-		if relErr != nil || strings.HasPrefix(relPath, "..") {
-			return &ToolResult{Error: "access denied: path outside package root"}, nil
-		}
-
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to read file: %v", err)}, nil
-		}
-
-		return &ToolResult{Content: string(content)}, nil
-	}
-}
-
-// writeFileHandler returns a handler for the write_file tool
-func writeFileHandler(packageRoot string) ToolHandler {
-	return func(ctx context.Context, arguments string) (*ToolResult, error) {
-		var args struct {
-			Path    string `json:"path"`
-			Content string `json:"content"`
-		}
-
-		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to parse arguments: %v", err)}, nil
-		}
-
-		// Construct the full path
-		fullPath := filepath.Join(packageRoot, args.Path)
-
-		// Security check: ensure we stay within package root, and only write in "_dev/build/docs"
-		allowedDir := filepath.Join(packageRoot, "_dev", "build", "docs")
-		cleanPath := filepath.Clean(fullPath)
-		cleanAllowed := filepath.Clean(allowedDir)
-		relPath, relErr := filepath.Rel(cleanAllowed, cleanPath)
-		if relErr != nil || strings.HasPrefix(relPath, "..") {
-			return &ToolResult{Error: "access denied: path outside allowed directory"}, nil
-		}
-
-		// Create directory if it doesn't exist
-		dir := filepath.Dir(fullPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to create directory: %v", err)}, nil
-		}
-
-		// Write the file
-		if err := os.WriteFile(fullPath, []byte(args.Content), 0o644); err != nil {
-			return &ToolResult{Error: fmt.Sprintf("failed to write file: %v", err)}, nil
-		}
-
-		return &ToolResult{Content: fmt.Sprintf("Successfully wrote %d bytes to %s", len(args.Content), args.Path)}, nil
-	}
-}
-
-// getReadmeTemplateHandler returns a handler for the get_readme_template tool
-func getReadmeTemplateHandler() ToolHandler {
-	return func(ctx context.Context, arguments string) (*ToolResult, error) {
-		// Get the embedded template content
-		templateContent := archetype.GetPackageDocsReadmeTemplate()
-		return &ToolResult{Content: templateContent}, nil
-	}
-}
-
-// getExampleReadmeHandler returns a handler for the get_example_readme tool
-func getExampleReadmeHandler() ToolHandler {
+// getPackageRootHandler returns a handler for the get_package_root tool
+func getPackageRootHandler(packageRoot string) ToolHandler {
+	cleanRoot := filepath.Clean(packageRoot)
 	return func(ctx context.Context, arguments string) (*ToolResult, error) {
 		// Get the embedded example content
-		return &ToolResult{Content: exampleReadmeContent}, nil
+		return &ToolResult{Content: cleanRoot}, nil
 	}
 }

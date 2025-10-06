@@ -26,7 +26,9 @@ const (
 	FieldsCacheName       = "fields"
 	KibanaConfigCacheName = "kibana_config"
 
-	mcpJson = "mcp.json"
+	llm        = "llm_config"
+	promptsDir = "prompts"
+	mcpJson    = "mcp.json"
 )
 
 var (
@@ -99,9 +101,19 @@ func (loc LocationManager) CacheDir(name string) string {
 	return filepath.Join(loc.stackPath, cacheDir, name)
 }
 
-// CacheDir returns the directory with cached fields
+// Llm returns the directory with the LLM configuration
+func (loc LocationManager) LlmDir() string {
+	return filepath.Join(loc.stackPath, llm)
+}
+
+// MCPJson returns the file location for the MCP server configuration
 func (loc LocationManager) MCPJson() string {
-	return filepath.Join(loc.stackPath, mcpJson)
+	return filepath.Join(loc.LlmDir(), mcpJson)
+}
+
+// Llm returns the directory with the LLM configuration
+func (loc LocationManager) LlmPromptsDir() string {
+	return filepath.Join(loc.LlmDir(), promptsDir)
 }
 
 // configurationDir returns the configuration directory location

@@ -156,7 +156,7 @@ func NewDocumentationAgent(provider LLMProvider, packageRoot string) (*Documenta
 	// Load the mcp file
 	servers := MCPTools()
 	if servers != nil {
-		for _, srv := range servers.Inner {
+		for _, srv := range servers.Servers {
 			if len(srv.Tools) > 0 {
 				tools = append(tools, srv.Tools...)
 			}
@@ -481,6 +481,8 @@ func (d *DocumentationAgent) handleRequestChanges() (string, bool, bool, error) 
 
 // buildInitialPrompt creates the initial prompt for the LLM
 func (d *DocumentationAgent) buildInitialPrompt(manifest *packages.PackageManifest) string {
+
+	// read in initial prompt, or use the built-in one
 	return fmt.Sprintf(initialPrompt,
 		manifest.Name,
 		manifest.Title,
