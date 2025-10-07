@@ -27,7 +27,6 @@ const (
 	KibanaConfigCacheName = "kibana_config"
 
 	llm        = "llm_config"
-	promptsDir = "prompts"
 	mcpJson    = "mcp.json"
 )
 
@@ -109,11 +108,6 @@ func (loc LocationManager) LlmDir() string {
 // MCPJson returns the file location for the MCP server configuration
 func (loc LocationManager) MCPJson() string {
 	return filepath.Join(loc.LlmDir(), mcpJson)
-}
-
-// Llm returns the directory with the LLM configuration
-func (loc LocationManager) LlmPromptsDir() string {
-	return filepath.Join(loc.LlmDir(), promptsDir)
 }
 
 // configurationDir returns the configuration directory location
