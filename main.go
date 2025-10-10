@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/charmbracelet/fang"
+
 	"github.com/elastic/elastic-package/cmd"
 	"github.com/elastic/elastic-package/internal/install"
 )
@@ -23,7 +25,11 @@ func main() {
 
 	rootCmd := cmd.RootCmd()
 	rootCmd.SilenceErrors = true // Silence errors so we handle them here.
-	err = rootCmd.Execute()
+	err = fang.Execute(
+		context.Background(),
+		rootCmd,
+		fang.WithNotifySignal(os.Interrupt, os.Kill),
+		)
 	if errIsInterruption(err) {
 		rootCmd.Println("interrupted")
 		os.Exit(130)
