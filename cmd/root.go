@@ -27,7 +27,6 @@ var commands = []*cobraext.Command{
 	setupDumpCommand(),
 	setupEditCommand(),
 	setupExportCommand(),
-	setupForeachCommand(),
 	setupFormatCommand(),
 	setupInstallCommand(),
 	setupLinksCommand(),
@@ -57,6 +56,8 @@ func RootCmd() *cobra.Command {
 	}
 	rootCmd.PersistentFlags().CountP(cobraext.VerboseFlagName, cobraext.VerboseFlagShorthand, cobraext.VerboseFlagDescription)
 	rootCmd.PersistentFlags().StringP(cobraext.ChangeDirectoryFlagName, cobraext.ChangeDirectoryFlagShorthand, "", cobraext.ChangeDirectoryFlagDescription)
+	rootCmd.PersistentFlags().StringSliceP("package", "P", nil, packagesDescription)
+	rootCmd.PersistentFlags().BoolP(cobraext.FailFastFlagName, "f", false, cobraext.FailFastFlagDescription)
 
 	for _, cmd := range commands {
 		rootCmd.AddCommand(cmd.Command)

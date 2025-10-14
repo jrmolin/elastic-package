@@ -260,6 +260,17 @@ type Stream struct {
 	Vars         []Variable `config:"vars" json:"vars" yaml:"vars"`
 }
 
+type BuildYaml struct {
+	Dependencies *BuildDependencies `yaml:"dependencies"` 
+}
+type BuildDependencies struct {
+	Ecs *BuildEcs `yaml:"ecs"` 
+}
+
+type BuildEcs struct {
+	Reference string `yaml:"reference"` 
+}
+
 // HasSource checks if a given index or data stream name maches the transform sources
 func (t *Transform) HasSource(name string) (bool, error) {
 	for _, indexPattern := range t.Definition.Source.Index {
@@ -338,6 +349,76 @@ func FindPackagesRoot() (string, bool, error) {
 		return "", false, fmt.Errorf("locating working directory failed: %w", err)
 	}
 	return FindPackagesRootFrom(workDir)
+}
+
+
+type Set struct {
+	elements map[string]struct{}
+}
+
+func NewSet() *Set {
+	return &Set{
+		elements: make(map[string]struct{}),
+	}
+}
+
+func (s *Set) Add(value string) {
+	s.elements[value] = struct{}{}
+}
+
+func (s *Set) Remove(value string) {
+	delete(s.elements, value)
+}
+
+func (s *Set) Contains(value string) bool {
+	_, found := s.elements[value]
+	return found
+}
+
+func (s *Set) Size() int {
+	return len(s.elements)
+}
+
+func (s *Set) List() []string {
+	keys := make([]string, 0, len(s.elements))
+	for key := range s.elements {
+		keys = append(keys, key)
+	}
+	return keys
+}
+func GetPackagesFromGlobs(globs []string) ([]string, error) {
+	//packageGlobs, _ := cmd.Flags().GetStringSlice("package")
+	packageSet := NewSet()
+
+	// get a list of all the packages
+	// filter each package through all the given globs
+	// the matches go into another array
+
+	// find the packages directory
+	// loop over each directory under packages/
+	// open each manifest and calculate statistics of some things
+	packagesRoot, found, err := FindPackagesRoot()
+
+	if err != nil {
+		return nil, fmt.Errorf("locating package root failed: %w", err)
+	} else if !found {
+		return nil, errors.New("package root not found")
+	}
+
+	// loop over each directory in the packagesRoot
+	for _, p := range globs {
+		manifests, err := filepath.Glob(filepath.Join(packagesRoot, p, PackageManifestFile))
+		if err != nil {
+			continue
+		}
+
+		for _, m := range manifests {
+			packageSet.Add(filepath.Dir(m))
+		}
+
+	}
+
+	return packageSet.List(), nil
 }
 
 func FindPackagesRootFrom(fromDir string) (string, bool, error) {
@@ -440,6 +521,21 @@ func ReadPackageManifest(path string) (*PackageManifest, error) {
 	}
 
 	var m PackageManifest
+	err = cfg.Unpack(&m)
+	if err != nil {
+		return nil, fmt.Errorf("unpacking package manifest failed (path: %s): %w", path, err)
+	}
+	return &m, nil
+}
+
+// ReadBuildYaml reads and parses the given package _dev/build/build.yml file.
+func ReadBuildYaml(path string) (*BuildYaml, error) {
+	cfg, err := yaml.NewConfigWithFile(path, ucfg.PathSep("."))
+	if err != nil {
+		return nil, fmt.Errorf("reading file failed (path: %s): %w", path, err)
+	}
+
+	var m BuildYaml
 	err = cfg.Unpack(&m)
 	if err != nil {
 		return nil, fmt.Errorf("unpacking package manifest failed (path: %s): %w", path, err)
