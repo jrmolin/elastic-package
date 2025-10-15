@@ -61,19 +61,9 @@ func buildCommandAction(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// if we have packages to operate on, use those
-	packageGlobs, _ := cmd.Flags().GetStringSlice("package")
-
-	var packageList []string
-	if len(packageGlobs) > 0 {
-		packages_, _ := packages.GetPackagesFromGlobs(packageGlobs)
-		packageList = append(packageList, packages_...)
-	} else {
-		packageRoot, err := packages.MustFindPackageRoot()
-		if err != nil {
-			return fmt.Errorf("locating package root failed: %w", err)
-		}
-		packageList = append(packageList, packageRoot)
+	packageRoot, err := packages.MustFindPackageRoot()
+	if err != nil {
+		return fmt.Errorf("locating package root failed: %w", err)
 	}
 
 	buildDir, err := builder.BuildDirectory()
@@ -82,29 +72,27 @@ func buildCommandAction(cmd *cobra.Command, args []string) error {
 	}
 	logger.Debugf("Use build directory: %s", buildDir)
 
-	for _, packageRoot := range packageList {
-		targets, err := docs.UpdateReadmes(packageRoot, buildDir)
-		if err != nil {
-			return fmt.Errorf("updating files failed: %w", err)
-		}
-
-		for _, target := range targets {
-			fileName := filepath.Base(target)
-			cmd.Printf("%s file rendered: %s\n", fileName, target)
-		}
-
-		target, err := builder.BuildPackage(cmd.Context(), builder.BuildOptions{
-			PackageRoot:    packageRoot,
-			BuildDir:       buildDir,
-			CreateZip:      createZip,
-			SignPackage:    signPackage,
-			SkipValidation: skipValidation,
-		})
-		if err != nil {
-			return fmt.Errorf("building package failed: %w", err)
-		}
-		cmd.Printf("Package built: %s\n", target)
+	targets, err := docs.UpdateReadmes(packageRoot, buildDir)
+	if err != nil {
+		return fmt.Errorf("updating files failed: %w", err)
 	}
+
+	for _, target := range targets {
+		fileName := filepath.Base(target)
+		cmd.Printf("%s file rendered: %s\n", fileName, target)
+	}
+
+	target, err := builder.BuildPackage(cmd.Context(), builder.BuildOptions{
+		PackageRoot:    packageRoot,
+		BuildDir:       buildDir,
+		CreateZip:      createZip,
+		SignPackage:    signPackage,
+		SkipValidation: skipValidation,
+	})
+	if err != nil {
+		return fmt.Errorf("building package failed: %w", err)
+	}
+	cmd.Printf("Package built: %s\n", target)
 
 	cmd.Println("Done")
 	return nil

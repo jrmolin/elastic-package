@@ -7,6 +7,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"path/filepath"
 
@@ -49,8 +50,6 @@ func setupForeachCommand() *cobraext.Command {
 		RunE:  foreachCommandAction,
 	}
 
-	cmd.PersistentFlags().StringSliceP("package", "P", nil, packagesDescription)
-	cmd.PersistentFlags().BoolP(cobraext.FailFastFlagName, "f", false, cobraext.FailFastFlagDescription)
 	cmd.PersistentFlags().StringP("constraint", "c", "kibana.version==9.1", "the version to verify")
 
 	ecs := &cobra.Command{
@@ -59,88 +58,115 @@ func setupForeachCommand() *cobraext.Command {
 		Long:  foreachLongDescription,
 		RunE:  updateEcsVersionAction,
 	}
-
 	cmd.AddCommand(ecs)
+
+	tester := &cobra.Command{
+		Use:   "test-pipeline",
+		Short: "Perform the pipeline tests for each package",
+		Long:  foreachLongDescription,
+		RunE:  runPipelineTests,
+	}
+	cmd.AddCommand(tester)
+
+	build := &cobra.Command{
+		Use:   "build-pipeline",
+		Short: "Perform the pipeline tests for each package",
+		Long:  foreachLongDescription,
+		RunE:  func(cmd *cobra.Command, args []string) error {
+			originalDir, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("can't find our current directory: %w", err)
+			}
+
+			// get the package roots
+			packageList, err := getPackageRoots(cmd)
+			if err != nil {
+				return fmt.Errorf("can't find packages to operate on: %w", err)
+			}
+
+
+			for _, packageRoot := range packageList {
+
+				// Change the working directory
+				err = os.Chdir(packageRoot)
+				if err != nil {
+					return fmt.Errorf("Error changing directory to %s: %v", packageRoot, err)
+				}
+				fmt.Printf("Changed working directory to: %s\n", packageRoot)
+
+				// Verify the new working directory
+				currentDir, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("Error getting current working directory: %v", err)
+				}
+				fmt.Printf("Current working directory after change: %s\n", currentDir)
+
+				err = cobraext.ComposeCommands(cmd, args,
+					setupBuildCommand(),
+				)
+				if err != nil {
+					return fmt.Errorf("failed to check the package: %v", err)
+				}
+
+				// Optionally, change back to the original directory
+				err = os.Chdir(originalDir)
+				if err != nil {
+					return fmt.Errorf("Error changing back to original directory %s: %v", originalDir, err)
+				}
+				// go back to the original directory
+			}
+
+			return nil
+		},
+	}
+
+	cmd.AddCommand(build)
+
+	check := setupCheckCommand()
+	cmd.AddCommand(check.Command)
 
 	return cobraext.NewCommand(cmd, cobraext.ContextPackage)
 }
 
 func filterByGlob(){}
 
-type Set struct {
-	elements map[string]struct{}
-}
 
-func NewSet() *Set {
-	return &Set{
-		elements: make(map[string]struct{}),
-	}
-}
-
-func (s *Set) Add(value string) {
-	s.elements[value] = struct{}{}
-}
-
-func (s *Set) Remove(value string) {
-	delete(s.elements, value)
-}
-
-func (s *Set) Contains(value string) bool {
-	_, found := s.elements[value]
-	return found
-}
-
-func (s *Set) Size() int {
-	return len(s.elements)
-}
-
-func (s *Set) List() []string {
-	keys := make([]string, 0, len(s.elements))
-	for key := range s.elements {
-		keys = append(keys, key)
-	}
-	return keys
-}
-
-func updateEcsVersionAction(cmd *cobra.Command, args []string) error {
+func runPipelineTests(cmd *cobra.Command, args []string) error {
 	cmd.Println("go through each package")
-	packageSet := NewSet()
 
-	packageGlobs, err := cmd.Flags().GetStringSlice("package")
-	cmd.Printf("does any match %v :: %v\n", packageGlobs, err)
-
-	// get a list of all the packages
-	// filter each package through all the given globs
-	// the matches go into another array
-
-	// find the packages directory
-	// loop over each directory under packages/
-	// open each manifest and calculate statistics of some things
-	packagesRoot, found, err := packages.FindPackagesRoot()
-	cmd.Printf("found root %v (%v)\n", packagesRoot, found)
+	//failFast, _ := cmd.Flags().GetBool(cobraext.FailFastFlagName)
+	packageList, err := getPackageRoots(cmd)
 	if err != nil {
-		return fmt.Errorf("locating package root failed: %w", err)
-	}
-	if !found {
-		return errors.New("package root not found")
-	}
-
-	// loop over each directory in the packagesRoot
-	for _, p := range packageGlobs {
-		manifests, err := filepath.Glob(filepath.Join(packagesRoot, p, packages.PackageManifestFile))
-		if err != nil {
-			return fmt.Errorf("failed matching files with manifest definitions: %w", err)
-		}
-
-		for _, m := range manifests {
-			packageSet.Add(m)
-		}
-
+		return fmt.Errorf("can't find packages to operate on: %w", err)
 	}
 
 	cmd.Printf("found the following manifests:\n")
-	for _, m := range packageSet.List() {
-		cmd.Printf("  %s\n", m)
+	for _, m := range packageList {
+		// unmarshal the thing to BuildYaml
+		yammie, _ := packages.ReadBuildYaml(m)
+		cmd.Printf("  %s :: %v\n", m, yammie.Dependencies.Ecs.Reference)
+
+		// parse the Reference string git '@' v#.##.#
+	}
+	return nil
+
+}
+func updateEcsVersionAction(cmd *cobra.Command, args []string) error {
+	cmd.Println("go through each package")
+
+	//failFast, _ := cmd.Flags().GetBool(cobraext.FailFastFlagName)
+	packageList, err := getPackageRoots(cmd)
+	if err != nil {
+		return fmt.Errorf("can't find packages to operate on: %w", err)
+	}
+
+	cmd.Printf("found the following manifests:\n")
+	for _, m := range packageList {
+		// unmarshal the thing to BuildYaml
+		yammie, _ := packages.ReadBuildYaml(m)
+		cmd.Printf("  %s :: %v\n", m, yammie.Dependencies.Ecs.Reference)
+
+		// parse the Reference string git '@' v#.##.#
 	}
 	return nil
 
@@ -152,13 +178,16 @@ func foreachCommandAction(cmd *cobra.Command, args []string) error {
 
 	if args[0] == "test" {
 		cmd.Println(args)
-		test := setupTestCommand()
-		for _,c := range test.Command.Commands() {
-			cmd.Println(c)
-			if args[1] == c.Use {
-				c.Run(cmd, nil)
-			}
+
+		// foreach package
+		err := cobraext.ComposeCommands(cmd, []string{},
+			setupTestCommand(),
+		)
+		if err != nil {
+			return err
 		}
+		cmd.Println("Done")
+		return nil
 
 	}
 

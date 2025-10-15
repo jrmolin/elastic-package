@@ -13,6 +13,7 @@ import (
 
 	"github.com/elastic/elastic-package/internal/cobraext"
 	"github.com/elastic/elastic-package/internal/logger"
+	"github.com/elastic/elastic-package/internal/packages"
 	"github.com/elastic/elastic-package/internal/version"
 )
 
@@ -27,6 +28,7 @@ var commands = []*cobraext.Command{
 	setupDumpCommand(),
 	setupEditCommand(),
 	setupExportCommand(),
+	setupForeachCommand(),
 	setupFormatCommand(),
 	setupInstallCommand(),
 	setupLinksCommand(),
@@ -56,7 +58,7 @@ func RootCmd() *cobra.Command {
 	}
 	rootCmd.PersistentFlags().CountP(cobraext.VerboseFlagName, cobraext.VerboseFlagShorthand, cobraext.VerboseFlagDescription)
 	rootCmd.PersistentFlags().StringP(cobraext.ChangeDirectoryFlagName, cobraext.ChangeDirectoryFlagShorthand, "", cobraext.ChangeDirectoryFlagDescription)
-	rootCmd.PersistentFlags().StringSliceP("package", "P", nil, packagesDescription)
+	rootCmd.PersistentFlags().StringSliceP(cobraext.PackageGlobFlagName, cobraext.PackageGlobFlagShorthand, nil, packagesDescription)
 	rootCmd.PersistentFlags().BoolP(cobraext.FailFastFlagName, "f", false, cobraext.FailFastFlagDescription)
 
 	for _, cmd := range commands {
@@ -103,4 +105,24 @@ func processPersistentFlags(cmd *cobra.Command, args []string) error {
 func checkVersionUpdate(cmd *cobra.Command, args []string) error {
 	version.CheckUpdate(cmd.Context())
 	return nil
+}
+
+func getPackageRoots(cmd *cobra.Command) ([]string, error) {
+	// if we have packages to operate on, use those
+	packageGlobs, _ := cmd.Flags().GetStringSlice(cobraext.PackageGlobFlagName)
+
+	var packageList []string
+	if len(packageGlobs) > 0 {
+		packages_, _ := packages.GetPackagesFromGlobs(packageGlobs)
+		packageList = append(packageList, packages_...)
+	} else {
+		packageRoot, err := packages.MustFindPackageRoot()
+		if err != nil {
+			return nil, fmt.Errorf("locating package root failed: %w", err)
+		}
+		packageList = append(packageList, packageRoot)
+	}
+
+	return packageList, nil
+
 }

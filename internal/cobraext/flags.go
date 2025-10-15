@@ -138,6 +138,10 @@ const (
 	GenerateTestResultFlagName        = "generate"
 	GenerateTestResultFlagDescription = "generate test result file"
 
+	PackageGlobFlagName        = "package-glob"
+	PackageGlobFlagShorthand   = "G"
+	PackageGlobFlagDescription = "the glob to use for gathering the list of packages to operate on"
+
 	PackagesFlagName        = "packages"
 	PackagesFlagDescription = "whether to return packages names or complete paths for the linked files found"
 
