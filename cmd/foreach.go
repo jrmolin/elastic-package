@@ -61,10 +61,55 @@ func setupForeachCommand() *cobraext.Command {
 	cmd.AddCommand(ecs)
 
 	tester := &cobra.Command{
-		Use:   "test-pipeline",
-		Short: "Perform the pipeline tests for each package",
+		Use:   "test-all",
+		Short: "Perform all the tests for each package",
 		Long:  foreachLongDescription,
-		RunE:  runPipelineTests,
+		RunE:  func(cmd *cobra.Command, args []string) error {
+			originalDir, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("can't find our current directory: %w", err)
+			}
+
+			// get the package roots
+			packageList, err := getPackageRoots(cmd)
+			if err != nil {
+				return fmt.Errorf("can't find packages to operate on: %w", err)
+			}
+
+
+			for _, packageRoot := range packageList {
+
+				// Change the working directory
+				err = os.Chdir(packageRoot)
+				if err != nil {
+					return fmt.Errorf("Error changing directory to %s: %v", packageRoot, err)
+				}
+				fmt.Printf("Changed working directory to: %s\n", packageRoot)
+
+				// Verify the new working directory
+				currentDir, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("Error getting current working directory: %v", err)
+				}
+				fmt.Printf("Current working directory after change: %s\n", currentDir)
+
+				err = cobraext.ComposeCommands(cmd, args,
+					setupTestCommand(),
+				)
+				if err != nil {
+					return fmt.Errorf("failed to check the package: %v", err)
+				}
+
+				// Optionally, change back to the original directory
+				err = os.Chdir(originalDir)
+				if err != nil {
+					return fmt.Errorf("Error changing back to original directory %s: %v", originalDir, err)
+				}
+				// go back to the original directory
+			}
+
+			return nil
+		},
 	}
 	cmd.AddCommand(tester)
 
