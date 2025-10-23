@@ -129,6 +129,55 @@ func (d *DocumentationAgent) UpdateDocumentation(ctx context.Context, nonInterac
 	return d.runInteractiveMode(ctx, prompt)
 }
 
+// ModifyDocumentation runs the documentation modification process for targeted changes
+func (d *DocumentationAgent) ModifyDocumentation(ctx context.Context, nonInteractive bool, modifyPrompt string) error {
+	// Check if README exists
+	readmePath := filepath.Join(d.packageRoot, "_dev", "build", "docs", "README.md")
+	if _, err := os.Stat(readmePath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("cannot modify documentation: README.md does not exist at _dev/build/docs/README.md.")
+		}
+		return fmt.Errorf("failed to check README.md: %w", err)
+	}
+
+	// Backup original README content before making any changes
+	d.backupOriginalReadme()
+
+	// Get modification instructions if not provided
+	var instructions string
+	if modifyPrompt != "" {
+		instructions = modifyPrompt
+	} else if !nonInteractive {
+		// Prompt user for modification instructions
+		var err error
+		instructions, err = tui.AskTextArea("What changes would you like to make to the documentation?")
+		if err != nil {
+			// Check if user cancelled
+			if errors.Is(err, tui.ErrCancelled) {
+				fmt.Println("⚠️  Modification cancelled.")
+				return nil
+			}
+			return fmt.Errorf("prompt failed: %w", err)
+		}
+
+		// Check if no changes were provided
+		if strings.TrimSpace(instructions) == "" {
+			return fmt.Errorf("no modification instructions provided")
+		}
+	} else {
+		return fmt.Errorf("--modify-prompt flag is required in non-interactive mode")
+	}
+
+	// Create the revision prompt with modification instructions
+	prompt := d.buildRevisionPrompt(instructions)
+
+	if nonInteractive {
+		return d.runNonInteractiveMode(ctx, prompt)
+	}
+
+	return d.runInteractiveMode(ctx, prompt)
+}
+
 // runNonInteractiveMode handles the non-interactive documentation update flow
 func (d *DocumentationAgent) runNonInteractiveMode(ctx context.Context, prompt string) error {
 	fmt.Println("Starting non-interactive documentation update process...")
