@@ -49,7 +49,7 @@ Configuration options for LLM providers (environment variables or profile config
 - LOCAL_LLM_ENDPOINT / llm.local.endpoint: Endpoint for local LLM server
 - LOCAL_LLM_MODEL / llm.local.model: Model name for local LLM (defaults to llama2)
 - LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional)
-- ELASTIC_PACKAGE_LLM_EXTERNAL_PROMPTS / llm.external_prompts: Enable external prompt files (defaults to false)`
+- LLM_EXTERNAL_PROMPTS / llm.external_prompts: Enable external prompt files (defaults to false)`
 
 // getConfigValue retrieves a configuration value with fallback from environment variable to profile config
 func getConfigValue(profile *profile.Profile, envVar, configKey, defaultValue string) string {
