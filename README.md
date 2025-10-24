@@ -652,22 +652,25 @@ _Context: global_
 
 Use this command to update package documentation using an AI agent or to get manual instructions for update.
 
-The AI agent will:
-1. Analyze your package structure, data streams, and configuration
-2. Generate comprehensive documentation following Elastic's templates
-3. Allow you to review and request changes interactively (or automatically accept in non-interactive mode)
-4. Create or update the README.md file in /_dev/build/docs/
+The AI agent supports two modes:
+1. Rewrite mode (default): Full documentation regeneration
+   - Analyzes your package structure, data streams, and configuration
+   - Generates comprehensive documentation following Elastic's templates
+   - Creates or updates the README.md file in /_dev/build/docs/
+2. Modify mode: Targeted documentation changes
+   - Makes specific changes to existing documentation
+   - Requires existing README.md file at /_dev/build/docs/README.md
+   - Use --modify-prompt flag for non-interactive modifications
 
-After the AI agent has generated updated documentation, you will be able to review it, and optionally, provide additional prompts that will be given
-to the AI agent to request changes to the generated documentation.
+Interactive workflow:
+After confirming you want to use the AI agent, you'll choose between rewrite or modify mode.
+You can review results and request additional changes iteratively.
 
+Non-interactive mode:
 Use --non-interactive to skip all prompts and automatically accept the first result from the LLM.
+Combine with --modify-prompt "instructions" for targeted non-interactive changes.
 
 If no LLM provider is configured, this command will print instructions for updating the documentation manually.
-
-The command supports multiple LLM providers and will automatically use the first available provider based on 
-environment variables or profile configuration. It analyzes your package and updates the /_dev/build/docs/README.md file with comprehensive 
-documentation based on the package contents and structure.
 
 Configuration options for LLM providers (environment variables or profile config):
 - BEDROCK_API_KEY / llm.bedrock.api_key: API key for Amazon Bedrock
@@ -677,7 +680,8 @@ Configuration options for LLM providers (environment variables or profile config
 - GEMINI_MODEL / llm.gemini.model: Model ID (defaults to gemini-2.5-pro)
 - LOCAL_LLM_ENDPOINT / llm.local.endpoint: Endpoint for local LLM server
 - LOCAL_LLM_MODEL / llm.local.model: Model name for local LLM (defaults to llama2)
-- LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional).
+- LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional)
+- ELASTIC_PACKAGE_LLM_EXTERNAL_PROMPTS / llm.external_prompts: Enable external prompt files (defaults to false).
 
 ### `elastic-package version`
 
@@ -733,40 +737,81 @@ The following settings are available per profile:
 
 ### AI-powered Documentation Configuration
 
-The `elastic-package update documentation` command supports AI-powered documentation generation using various LLM providers. With this command, you can connect
-with an LLM provider, which will assist you in updating documentation, by generating a version which will follow the recommended template, and will fill in documentation sections. Please review the generated documention for accuracy and correctness before finalizing the documentation.
+The `elastic-package update documentation` command supports AI-powered documentation generation using various LLM providers.
 
-When using AI-powered document generation, all files within the package directory may be sent to the LLM provider.
+**⚠️ IMPORTANT PRIVACY NOTICE:**
+When using AI-powered documentation generation, **file content from your local file system within the package directory may be sent to the configured LLM provider**. This includes manifest files, configuration files, field definitions, and other package content. The generated documentation **must be reviewed for accuracy and correctness** before being finalized, as LLMs may occasionally produce incorrect or hallucinated information.
 
-You can configure the LLM providers through profile settings as an alternative to environment variables:
+#### Operation Modes
+
+The command supports two modes of operation:
+
+1. **Rewrite Mode** (default): Full documentation regeneration
+   - Analyzes your package structure, data streams, and configuration
+   - Generates comprehensive documentation following Elastic's templates
+   - Creates or updates the README.md file in `/_dev/build/docs/`
+
+2. **Modify Mode**: Targeted documentation changes
+   - Makes specific changes to existing documentation
+   - Requires existing README.md file at `/_dev/build/docs/README.md`
+   - Use `--modify-prompt` flag for non-interactive modifications
+
+#### Workflow Options
+
+**Interactive Mode** (default): 
+The command will guide you through the process, allowing you to:
+- Choose between rewrite or modify mode
+- Review generated documentation
+- Request iterative changes
+- Accept or cancel the update
+
+**Non-Interactive Mode**:
+Use `--non-interactive` to skip all prompts and automatically accept the first result.
+Combine with `--modify-prompt "instructions"` for targeted non-interactive changes.
+
+If no LLM provider is configured, the command will print manual instructions for updating documentation.
+
+#### LLM Provider Configuration
+
+You can configure LLM providers through **profile settings** (in `~/.elastic-package/profiles/<profile>/config.yml`) as an alternative to environment variables:
 
 * `llm.bedrock.api_key`: API key for Amazon Bedrock LLM services
 * `llm.bedrock.region`: AWS region for Bedrock services (defaults to `us-east-1`)
 * `llm.bedrock.model`: Bedrock model ID (defaults to `anthropic.claude-3-5-sonnet-20241022-v2:0`)
-* `llm.gemini.api_key`: API key for Gemini LLM services  
+* `llm.gemini.api_key`: API key for Google Gemini LLM services  
 * `llm.gemini.model`: Gemini model ID (defaults to `gemini-2.5-pro`)
 * `llm.local.endpoint`: Endpoint URL for local OpenAI-compatible LLM servers
 * `llm.local.model`: Model name for local LLM servers (defaults to `llama2`)
 * `llm.local.api_key`: API key for local LLM servers (optional, if authentication is required)
+* `llm.external_prompts`: Enable loading custom prompt files from profile or data directory (defaults to `false`)
 
-**Usage Examples:**
+Environment variables (e.g., `BEDROCK_API_KEY`, `GEMINI_API_KEY`, `LOCAL_LLM_ENDPOINT`) take precedence over profile configuration.
+
+#### Usage Examples
 
 ```bash
-# Use AI agent to update documentation
+# Interactive documentation update (rewrite mode)
 elastic-package update documentation
+
+# Interactive modification mode
+elastic-package update documentation
+# (choose "Modify" when prompted)
+
+# Non-interactive rewrite
+elastic-package update documentation --non-interactive
+
+# Non-interactive targeted changes
+elastic-package update documentation --modify-prompt "Add more details about authentication configuration"
 
 # Use specific profile with LLM configuration
 elastic-package update documentation --profile production
-
-# Run non-interactively (skips the confirmation prompt, and use the first generated result from the LLM)
-elastic-package update documentation --non-interactive
 ```
 
-The AI agent will analyze your package structure, data streams, and configuration to generate comprehensive documentation following Elastic's templates. It provides an interactive process where you can review and request changes before finalizing the documentation.
+#### Advanced Features
 
 **Preserving Human-Edited Content:**
 
-When updating documentation with AI assistance, you can preserve manually edited sections by wrapping them with HTML comment markers:
+Manually edited sections can be preserved by wrapping them with HTML comment markers:
 
 ```html
 <!-- HUMAN-EDITED START -->
@@ -782,7 +827,19 @@ Important manual content to preserve
 <!-- PRESERVE END -->
 ```
 
-Any content between these markers will be preserved exactly as-is during AI-generated documentation updates. The system will automatically detect these sections, validate their preservation after generation, and warn you if any marked content was accidentally modified or removed.
+Any content between these markers will be preserved exactly as-is during AI-generated documentation updates. The system will automatically validate preservation after generation and warn if marked content was modified or removed.
+
+**Service Knowledge Base:**
+
+Place a `docs/knowledge_base/service_info.md` file in your package to provide authoritative service information. This file is treated as the source of truth and takes precedence over web search results during documentation generation.
+
+**Custom Prompts:**
+
+Enable `llm.external_prompts` in your profile config to use custom prompt files. Place them in:
+- `~/.elastic-package/profiles/<profile>/prompts/` (profile-specific)
+- `~/.elastic-package/prompts/` (global)
+
+Available prompt files: `initial_prompt.txt`, `revision_prompt.txt`, `limit_hit_prompt.txt`
 
 ## Useful environment variables
 
