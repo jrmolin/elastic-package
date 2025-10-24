@@ -85,6 +85,17 @@ func getConfigValue(profile *profile.Profile, envVar, configKey, defaultValue st
 	return defaultValue
 }
 
+// readServiceInfo reads the service_info.md file if it exists in docs/knowledge_base/
+// Returns the content and whether the file exists
+func (d *DocumentationAgent) readServiceInfo() (string, bool) {
+	serviceInfoPath := filepath.Join(d.packageRoot, "docs", "knowledge_base", "service_info.md")
+	content, err := os.ReadFile(serviceInfoPath)
+	if err != nil {
+		return "", false
+	}
+	return string(content), true
+}
+
 // DocumentationAgent handles documentation updates for packages
 type DocumentationAgent struct {
 	agent                 *Agent
@@ -462,12 +473,19 @@ func (d *DocumentationAgent) handleRequestChanges() (string, bool, bool, error) 
 // buildInitialPrompt creates the initial prompt for the LLM
 func (d *DocumentationAgent) buildInitialPrompt(manifest *packages.PackageManifest) string {
 	promptContent := loadPromptFile("initial_prompt.txt", initialPrompt, d.profile)
-	return fmt.Sprintf(promptContent,
+	basePrompt := fmt.Sprintf(promptContent,
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
 		manifest.Version,
 		manifest.Description)
+
+	// Check if service_info.md exists and append it to the prompt
+	if serviceInfo, exists := d.readServiceInfo(); exists {
+		basePrompt += fmt.Sprintf("\n\nKNOWLEDGE BASE - SERVICE INFORMATION (SOURCE OF TRUTH):\nThe following information is from docs/knowledge_base/service_info.md and should be treated as the authoritative source.\nIf you find conflicting information from other sources (web search, etc.), prefer the information below.\n\n---\n%s\n---\n", serviceInfo)
+	}
+
+	return basePrompt
 }
 
 // buildRevisionPrompt creates a comprehensive prompt for document revisions that includes all necessary context
@@ -480,13 +498,20 @@ func (d *DocumentationAgent) buildRevisionPrompt(changes string) string {
 	}
 
 	promptContent := loadPromptFile("revision_prompt.txt", revisionPrompt, d.profile)
-	return fmt.Sprintf(promptContent,
+	basePrompt := fmt.Sprintf(promptContent,
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
 		manifest.Version,
 		manifest.Description,
 		changes)
+
+	// Check if service_info.md exists and append it to the prompt
+	if serviceInfo, exists := d.readServiceInfo(); exists {
+		basePrompt += fmt.Sprintf("\n\nKNOWLEDGE BASE - SERVICE INFORMATION (SOURCE OF TRUTH):\nThe following information is from docs/knowledge_base/service_info.md and should be treated as the authoritative source.\nIf you find conflicting information from other sources (web search, etc.), prefer the information below.\n\n---\n%s\n---\n", serviceInfo)
+	}
+
+	return basePrompt
 }
 
 // handleTokenLimitResponse creates a section-based prompt when LLM hits token limits
