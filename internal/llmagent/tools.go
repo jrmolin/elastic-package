@@ -171,7 +171,6 @@ func MCPTools() *MCPJson {
 	return &mcpJson
 }
 
-
 // PackageTools creates the tools available to the LLM for package operations.
 // These tools do not allow access to `docs/`, to prevent the LLM from confusing the generated and non-generated README versions.
 func PackageTools(packageRoot string) []Tool {

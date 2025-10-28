@@ -26,8 +26,8 @@ const (
 	FieldsCacheName       = "fields"
 	KibanaConfigCacheName = "kibana_config"
 
-	llm        = "llm_config"
-	mcpJson    = "mcp.json"
+	llm     = "llm_config"
+	mcpJson = "mcp.json"
 )
 
 var (
