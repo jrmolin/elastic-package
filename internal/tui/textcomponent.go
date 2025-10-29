@@ -330,8 +330,8 @@ func (m *textComponentModel) viewModeRender() string {
 		BorderForeground(ansiBrightBlue).
 		BorderBottom(true).
 		Width(m.component.width).
-		MarginBottom(1).            // Add space after header
-		Padding(0, 2).              // Add horizontal padding
+		MarginBottom(1). // Add space after header
+		Padding(0, 2).   // Add horizontal padding
 		Align(lipgloss.Center)
 
 	scrollInfo := ""
@@ -447,4 +447,3 @@ func renderEditMode(message string, focused bool, textarea textarea.Model, error
 func (m *textComponentModel) editModeRender() string {
 	return renderEditMode(m.component.message, m.component.focused, m.component.textarea, m.component.error)
 }
-

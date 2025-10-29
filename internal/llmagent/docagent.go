@@ -100,12 +100,13 @@ func (d *DocumentationAgent) readServiceInfo() (string, bool) {
 type DocumentationAgent struct {
 	agent                 *Agent
 	packageRoot           string
+	targetDocFile         string // Target documentation file (e.g., README.md, vpc.md)
 	profile               *profile.Profile
-	originalReadmeContent *string // Stores original README content for restoration on cancel
+	originalReadmeContent *string // Stores original content for restoration on cancel
 }
 
 // NewDocumentationAgent creates a new documentation agent
-func NewDocumentationAgent(provider LLMProvider, packageRoot string, profile *profile.Profile) (*DocumentationAgent, error) {
+func NewDocumentationAgent(provider LLMProvider, packageRoot string, targetDocFile string, profile *profile.Profile) (*DocumentationAgent, error) {
 	// Create tools for package operations
 	tools := PackageTools(packageRoot)
 
@@ -113,9 +114,10 @@ func NewDocumentationAgent(provider LLMProvider, packageRoot string, profile *pr
 	agent := NewAgent(provider, tools)
 
 	return &DocumentationAgent{
-		agent:       agent,
-		packageRoot: packageRoot,
-		profile:     profile,
+		agent:         agent,
+		packageRoot:   packageRoot,
+		targetDocFile: targetDocFile,
+		profile:       profile,
 	}, nil
 }
 
@@ -142,13 +144,13 @@ func (d *DocumentationAgent) UpdateDocumentation(ctx context.Context, nonInterac
 
 // ModifyDocumentation runs the documentation modification process for targeted changes
 func (d *DocumentationAgent) ModifyDocumentation(ctx context.Context, nonInteractive bool, modifyPrompt string) error {
-	// Check if README exists
-	readmePath := filepath.Join(d.packageRoot, "_dev", "build", "docs", "README.md")
-	if _, err := os.Stat(readmePath); err != nil {
+	// Check if documentation file exists
+	docPath := filepath.Join(d.packageRoot, "_dev", "build", "docs", d.targetDocFile)
+	if _, err := os.Stat(docPath); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("cannot modify documentation: README.md does not exist at _dev/build/docs/README.md.")
+			return fmt.Errorf("cannot modify documentation: %s does not exist at _dev/build/docs/%s", d.targetDocFile, d.targetDocFile)
 		}
-		return fmt.Errorf("failed to check README.md: %w", err)
+		return fmt.Errorf("failed to check %s: %w", d.targetDocFile, err)
 	}
 
 	// Backup original README content before making any changes
@@ -220,9 +222,9 @@ func (d *DocumentationAgent) runNonInteractiveMode(ctx context.Context, prompt s
 			return fmt.Errorf("section-based retry failed: %w", err)
 		}
 
-		// Check if README was successfully updated after retry
+		// Check if documentation file was successfully updated after retry
 		if updated, err := d.handleReadmeUpdate(); updated {
-			fmt.Println("\n📄 README.md was updated successfully with section-based approach!")
+			fmt.Printf("\n📄 %s was updated successfully with section-based approach!\n", d.targetDocFile)
 			return err
 		}
 	}
@@ -234,15 +236,15 @@ func (d *DocumentationAgent) runNonInteractiveMode(ctx context.Context, prompt s
 		return fmt.Errorf("LLM agent encountered an error: %s", result.FinalContent)
 	}
 
-	// Check if README was successfully updated
+	// Check if documentation file was successfully updated
 	if updated, err := d.handleReadmeUpdate(); updated {
-		fmt.Println("\n📄 README.md was updated successfully!")
+		fmt.Printf("\n📄 %s was updated successfully!\n", d.targetDocFile)
 		return err
 	}
 
 	// Second attempt with specific instructions
-	fmt.Println("⚠️  No README.md was updated. Trying again with specific instructions...")
-	specificPrompt := "You haven't updated a README.md file yet. Please create the README.md file in the _dev/build/docs/ directory based on your analysis. This is required to complete the task."
+	fmt.Printf("⚠️  No %s was updated. Trying again with specific instructions...\n", d.targetDocFile)
+	specificPrompt := fmt.Sprintf("You haven't updated a %s file yet. Please create the %s file in the _dev/build/docs/ directory based on your analysis. This is required to complete the task.", d.targetDocFile, d.targetDocFile)
 
 	if _, err := d.executeTaskWithLogging(ctx, specificPrompt); err != nil {
 		return fmt.Errorf("second attempt failed: %w", err)
@@ -250,11 +252,11 @@ func (d *DocumentationAgent) runNonInteractiveMode(ctx context.Context, prompt s
 
 	// Final check
 	if updated, err := d.handleReadmeUpdate(); updated {
-		fmt.Println("\n📄 README.md was updated on second attempt!")
+		fmt.Printf("\n📄 %s was updated on second attempt!\n", d.targetDocFile)
 		return err
 	}
 
-	return fmt.Errorf("failed to create README.md after two attempts")
+	return fmt.Errorf("failed to create %s after two attempts", d.targetDocFile)
 }
 
 // runInteractiveMode handles the interactive documentation update flow
@@ -347,7 +349,7 @@ func (d *DocumentationAgent) executeTaskWithLogging(ctx context.Context, prompt 
 	return result, nil
 }
 
-// handleReadmeUpdate checks if README was updated and reports the result
+// handleReadmeUpdate checks if documentation file was updated and reports the result
 func (d *DocumentationAgent) handleReadmeUpdate() (bool, error) {
 	readmeUpdated := d.checkReadmeUpdated()
 	if !readmeUpdated {
@@ -359,7 +361,7 @@ func (d *DocumentationAgent) handleReadmeUpdate() (bool, error) {
 		return false, err
 	}
 
-	fmt.Printf("✅ Documentation update completed! (%d characters written)\n", len(content))
+	fmt.Printf("✅ Documentation update completed! (%d characters written to %s)\n", len(content), d.targetDocFile)
 	return true, nil
 }
 
@@ -425,8 +427,8 @@ func (d *DocumentationAgent) handleAcceptAction(readmeUpdated bool) (string, boo
 		return "", false, true, nil
 	}
 
-	// README wasn't updated - ask user what to do
-	continuePrompt := tui.NewSelect("README.md file wasn't updated. What would you like to do?", []string{
+	// Documentation file wasn't updated - ask user what to do
+	continuePrompt := tui.NewSelect(fmt.Sprintf("%s file wasn't updated. What would you like to do?", d.targetDocFile), []string{
 		"Try again",
 		"Exit anyway",
 	}, "Try again")
@@ -438,13 +440,13 @@ func (d *DocumentationAgent) handleAcceptAction(readmeUpdated bool) (string, boo
 	}
 
 	if continueChoice == "Exit anyway" {
-		fmt.Println("⚠️  Exiting without creating README.md file.")
+		fmt.Printf("⚠️  Exiting without creating %s file.\n", d.targetDocFile)
 		d.restoreOriginalReadme()
 		return "", false, true, nil
 	}
 
-	fmt.Println("🔄 Trying again to create README.md...")
-	newPrompt := d.buildRevisionPrompt("You haven't written a README.md file yet. Please write the README.md file in the _dev/build/docs/ directory based on your analysis.")
+	fmt.Printf("🔄 Trying again to create %s...\n", d.targetDocFile)
+	newPrompt := d.buildRevisionPrompt(fmt.Sprintf("You haven't written a %s file yet. Please write the %s file in the _dev/build/docs/ directory based on your analysis.", d.targetDocFile, d.targetDocFile))
 	return newPrompt, true, false, nil
 }
 
@@ -474,11 +476,16 @@ func (d *DocumentationAgent) handleRequestChanges() (string, bool, bool, error) 
 func (d *DocumentationAgent) buildInitialPrompt(manifest *packages.PackageManifest) string {
 	promptContent := loadPromptFile("initial_prompt.txt", initialPrompt, d.profile)
 	basePrompt := fmt.Sprintf(promptContent,
+		d.targetDocFile, // Line 5: file path in task description
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
 		manifest.Version,
-		manifest.Description)
+		manifest.Description,
+		d.targetDocFile, // Line 16: file restriction directive
+		d.targetDocFile, // Line 33: tool usage guideline
+		d.targetDocFile, // Line 43: initial analysis step
+		d.targetDocFile) // Line 69: write results step
 
 	// Check if service_info.md exists and append it to the prompt
 	if serviceInfo, exists := d.readServiceInfo(); exists {
@@ -499,12 +506,18 @@ func (d *DocumentationAgent) buildRevisionPrompt(changes string) string {
 
 	promptContent := loadPromptFile("revision_prompt.txt", revisionPrompt, d.profile)
 	basePrompt := fmt.Sprintf(promptContent,
+		d.targetDocFile, // Line 5: target documentation file label
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
 		manifest.Version,
 		manifest.Description,
-		changes)
+		d.targetDocFile, // Line 15: file restriction directive
+		d.targetDocFile, // Line 17: read current content directive
+		d.targetDocFile, // Line 35: tool usage guideline
+		d.targetDocFile, // Line 38: step 1 - read current file
+		d.targetDocFile, // Line 44: step 7 - write documentation
+		changes)         // Line 47: user-requested changes
 
 	// Check if service_info.md exists and append it to the prompt
 	if serviceInfo, exists := d.readServiceInfo(); exists {
@@ -527,42 +540,46 @@ func (d *DocumentationAgent) handleTokenLimitResponse(originalResponse string) (
 	return sectionBasedPrompt, nil
 }
 
-// buildSectionBasedPrompt creates a prompt for generating README in sections
+// buildSectionBasedPrompt creates a prompt for generating documentation in sections
 func (d *DocumentationAgent) buildSectionBasedPrompt(manifest *packages.PackageManifest) string {
 	promptContent := loadPromptFile("limit_hit_prompt.txt", limitHitPrompt, d.profile)
 	return fmt.Sprintf(promptContent,
+		d.targetDocFile, // Line 3: task description
+		d.targetDocFile, // Line 5: target documentation file label
 		manifest.Name,
 		manifest.Title,
 		manifest.Type,
 		manifest.Version,
-		manifest.Description)
+		manifest.Description,
+		d.targetDocFile, // Line 33: write_file tool description
+		d.targetDocFile) // Line 42: step 2 - read current file
 }
 
-// displayReadmeIfUpdated shows README content if it was updated
+// displayReadmeIfUpdated shows documentation content if it was updated
 func (d *DocumentationAgent) displayReadmeIfUpdated() bool {
 	readmeUpdated := d.checkReadmeUpdated()
 	if !readmeUpdated {
-		fmt.Println("\n⚠️  README.md file not updated")
+		fmt.Printf("\n⚠️  %s file not updated\n", d.targetDocFile)
 		return false
 	}
 
 	sourceContent, err := d.readCurrentReadme()
 	if err != nil || sourceContent == "" {
-		fmt.Println("\n⚠️  README.md file exists but could not be read or is empty")
+		fmt.Printf("\n⚠️  %s file exists but could not be read or is empty\n", d.targetDocFile)
 		return false
 	}
 
 	// Try to render the content
-	renderedContent, shouldBeRendered, err := docs.GenerateReadme("README.md", d.packageRoot)
+	renderedContent, shouldBeRendered, err := docs.GenerateReadme(d.targetDocFile, d.packageRoot)
 	if err != nil || !shouldBeRendered {
-		fmt.Println("\n⚠️  The generated README.md could not be rendered.")
+		fmt.Printf("\n⚠️  The generated %s could not be rendered.\n", d.targetDocFile)
 		fmt.Println("It's recommended that you do not accept this version (ask for revisions or cancel).")
 		return true
 	}
 
 	// Show the processed/rendered content
 	processedContentStr := string(renderedContent)
-	fmt.Printf("📊 Processed README stats: %d characters, %d lines\n", len(processedContentStr), strings.Count(processedContentStr, "\n")+1)
+	fmt.Printf("📊 Processed %s stats: %d characters, %d lines\n", d.targetDocFile, len(processedContentStr), strings.Count(processedContentStr, "\n")+1)
 
 	// Try to open in browser first
 	if tryBrowserPreview(processedContentStr) {
@@ -570,7 +587,7 @@ func (d *DocumentationAgent) displayReadmeIfUpdated() bool {
 		fmt.Println("💡 Return here to accept or request changes.")
 	} else {
 		// Fallback to terminal display if browser preview fails
-		title := "📄 Processed README.md (as generated by elastic-package build)"
+		title := fmt.Sprintf("📄 Processed %s (as generated by elastic-package build)", d.targetDocFile)
 		if err := tui.ShowContent(title, processedContentStr); err != nil {
 			// Fallback to simple print if viewer fails
 			fmt.Printf("\n%s:\n", title)
@@ -600,17 +617,17 @@ func (d *DocumentationAgent) getUserAction() (string, error) {
 	return action, nil
 }
 
-// checkReadmeUpdated checks if README.md has been updated by comparing current content to originalReadmeContent
+// checkReadmeUpdated checks if the documentation file has been updated by comparing current content to originalReadmeContent
 func (d *DocumentationAgent) checkReadmeUpdated() bool {
-	readmePath := filepath.Join(d.packageRoot, "_dev", "build", "docs", "README.md")
+	docPath := filepath.Join(d.packageRoot, "_dev", "build", "docs", d.targetDocFile)
 
 	// Check if file exists
-	if _, err := os.Stat(readmePath); err != nil {
+	if _, err := os.Stat(docPath); err != nil {
 		return false
 	}
 
 	// Read current content
-	currentContent, err := os.ReadFile(readmePath)
+	currentContent, err := os.ReadFile(docPath)
 	if err != nil {
 		return false
 	}
@@ -626,10 +643,10 @@ func (d *DocumentationAgent) checkReadmeUpdated() bool {
 	return currentContentStr != *d.originalReadmeContent
 }
 
-// readCurrentReadme reads the current README.md content
+// readCurrentReadme reads the current documentation file content
 func (d *DocumentationAgent) readCurrentReadme() (string, error) {
-	readmePath := filepath.Join(d.packageRoot, "_dev", "build", "docs", "README.md")
-	content, err := os.ReadFile(readmePath)
+	docPath := filepath.Join(d.packageRoot, "_dev", "build", "docs", d.targetDocFile)
+	content, err := os.ReadFile(docPath)
 	if err != nil {
 		return "", err
 	}
@@ -804,45 +821,45 @@ func (d *DocumentationAgent) extractPreservedSections(content string) map[string
 	return sections
 }
 
-// backupOriginalReadme stores the current README content for potential restoration and comparison to the generated version
+// backupOriginalReadme stores the current documentation file content for potential restoration and comparison to the generated version
 func (d *DocumentationAgent) backupOriginalReadme() {
-	readmePath := filepath.Join(d.packageRoot, "_dev", "build", "docs", "README.md")
+	docPath := filepath.Join(d.packageRoot, "_dev", "build", "docs", d.targetDocFile)
 
-	// Check if README exists
-	if _, err := os.Stat(readmePath); err == nil {
+	// Check if documentation file exists
+	if _, err := os.Stat(docPath); err == nil {
 		// Read and store the original content
-		if content, err := os.ReadFile(readmePath); err == nil {
+		if content, err := os.ReadFile(docPath); err == nil {
 			contentStr := string(content)
 			d.originalReadmeContent = &contentStr
-			fmt.Printf("📋 Backed up original README.md (%d characters)\n", len(contentStr))
+			fmt.Printf("📋 Backed up original %s (%d characters)\n", d.targetDocFile, len(contentStr))
 		} else {
-			fmt.Printf("⚠️  Could not read original README.md for backup: %v\n", err)
+			fmt.Printf("⚠️  Could not read original %s for backup: %v\n", d.targetDocFile, err)
 		}
 	} else {
 		d.originalReadmeContent = nil
-		fmt.Println("📋 No existing README.md found - will create new one")
+		fmt.Printf("📋 No existing %s found - will create new one\n", d.targetDocFile)
 	}
 }
 
-// restoreOriginalReadme restores the README to its original state
+// restoreOriginalReadme restores the documentation file to its original state
 func (d *DocumentationAgent) restoreOriginalReadme() {
-	readmePath := filepath.Join(d.packageRoot, "_dev", "build", "docs", "README.md")
+	docPath := filepath.Join(d.packageRoot, "_dev", "build", "docs", d.targetDocFile)
 
 	if d.originalReadmeContent != nil {
 		// Restore original content
-		if err := os.WriteFile(readmePath, []byte(*d.originalReadmeContent), 0o644); err != nil {
-			fmt.Printf("⚠️  Failed to restore original README.md: %v\n", err)
+		if err := os.WriteFile(docPath, []byte(*d.originalReadmeContent), 0o644); err != nil {
+			fmt.Printf("⚠️  Failed to restore original %s: %v\n", d.targetDocFile, err)
 		} else {
-			fmt.Printf("🔄 Restored original README.md (%d characters)\n", len(*d.originalReadmeContent))
+			fmt.Printf("🔄 Restored original %s (%d characters)\n", d.targetDocFile, len(*d.originalReadmeContent))
 		}
 	} else {
 		// No original file existed, so remove any file that was created
-		if err := os.Remove(readmePath); err != nil {
+		if err := os.Remove(docPath); err != nil {
 			if !os.IsNotExist(err) {
-				fmt.Printf("⚠️  Failed to remove created README.md: %v\n", err)
+				fmt.Printf("⚠️  Failed to remove created %s: %v\n", d.targetDocFile, err)
 			}
 		} else {
-			fmt.Println("🗑️  Removed created README.md file - restored to original state (no file)")
+			fmt.Printf("🗑️  Removed created %s file - restored to original state (no file)\n", d.targetDocFile)
 		}
 	}
 }
