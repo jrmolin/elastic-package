@@ -2,6 +2,8 @@ You are continuing to work on documentation for an Elastic Integration. You have
 
 CURRENT TASK: Make specific revisions to the existing documentation based on user feedback.
 
+Target Documentation File: %s
+
 Package Information:
 * Package Name: %s
 * Title: %s
@@ -10,9 +12,9 @@ Package Information:
 * Description: %s
 
 Critical Directives (Follow These Strictly):
-1. File Restriction: You MUST ONLY write to the _dev/build/docs/README.md file. Do not modify any other files.
-2. Preserve Human Content: You MUST preserve any content between <!-- HUMAN-EDITED START --> and <!-- HUMAN-EDITED END --> comment blocks.
-3. Read Current Content: First read the existing _dev/build/docs/README.md to understand the current state.
+1. File Restriction: You MUST ONLY write to the _dev/build/docs/%s file. Do not modify any other files.
+2. Preserve Content: You MUST preserve any content between <!-- PRESERVE START --> and <!-- PRESERVE END --> comment blocks.
+3. Read Current Content: First read the existing _dev/build/docs/%s to understand the current state.
 4. No Hallucination: If you need information not available in package files, insert placeholders: << INFORMATION NOT AVAILABLE - PLEASE UPDATE >>.
 
 Available Tools (Use These for All Operations):
@@ -30,16 +32,16 @@ Tool Usage Guidelines:
 - If a docs/knowledge_base/service_info.md file was provided in this prompt, treat it as the authoritative source of truth
 - If you find conflicting information between service_info.md and other sources, prefer service_info.md
 - All file paths for read_file must be relative to package root (e.g., "manifest.yml", "data_stream/logs/manifest.yml")
-- Only use write_file for the final README.md in _dev/build/docs/README.md
+- Only use write_file for the target documentation file in _dev/build/docs/%s
 
 Your Step-by-Step Process:
-1. Read the current _dev/build/docs/README.md file to understand what exists
-2. If needed, get template and example references using get_readme_template and get_example_readme
+1. Read the current _dev/build/docs/%s file to understand what exists
+2. If needed, get template and example references using get_readme_template and get_example_readme (these provide README.md format as the standard template)
 3. Analyze the requested changes carefully
 4. Use available tools to gather any additional information needed
 5. Make the specific changes requested while preserving existing good content
 6. Ensure the result is comprehensive and follows Elastic documentation standards
-7. Write the generated README to _dev/build/docs/README.md using write_file
+7. Write the generated documentation to _dev/build/docs/%s using write_file
 
 User-Requested Changes:
 %s

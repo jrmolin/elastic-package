@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -24,11 +25,16 @@ The AI agent supports two modes:
 1. Rewrite mode (default): Full documentation regeneration
    - Analyzes your package structure, data streams, and configuration
    - Generates comprehensive documentation following Elastic's templates
-   - Creates or updates the README.md file in /_dev/build/docs/
+   - Creates or updates markdown files in /_dev/build/docs/
 2. Modify mode: Targeted documentation changes
    - Makes specific changes to existing documentation
-   - Requires existing README.md file at /_dev/build/docs/README.md
+   - Requires existing documentation file at /_dev/build/docs/
    - Use --modify-prompt flag for non-interactive modifications
+
+Multi-file support:
+   - Use --doc-file to specify which markdown file to update (defaults to README.md)
+   - In interactive mode, you'll be prompted to select from available files
+   - Supports packages with multiple documentation files (e.g., README.md, vpc.md, etc.)
 
 Interactive workflow:
 After confirming you want to use the AI agent, you'll choose between rewrite or modify mode.
@@ -64,6 +70,94 @@ func getConfigValue(profile *profile.Profile, envVar, configKey, defaultValue st
 	}
 
 	return defaultValue
+}
+
+// discoverDocumentationFiles finds all .md files in _dev/build/docs/
+func discoverDocumentationFiles(packageRoot string) ([]string, error) {
+	docsDir := filepath.Join(packageRoot, "_dev", "build", "docs")
+
+	// Check if directory exists
+	if _, err := os.Stat(docsDir); os.IsNotExist(err) {
+		return []string{"README.md"}, nil // Default if directory doesn't exist
+	}
+
+	entries, err := os.ReadDir(docsDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read docs directory: %w", err)
+	}
+
+	var mdFiles []string
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".md" {
+			mdFiles = append(mdFiles, entry.Name())
+		}
+	}
+
+	// If no files found, return README.md as default
+	if len(mdFiles) == 0 {
+		return []string{"README.md"}, nil
+	}
+
+	// Sort with README.md first if it exists
+	sort := func(files []string) []string {
+		var result []string
+		var others []string
+
+		for _, f := range files {
+			if f == "README.md" {
+				result = append(result, f)
+			} else {
+				others = append(others, f)
+			}
+		}
+		return append(result, others...)
+	}
+
+	return sort(mdFiles), nil
+}
+
+// selectDocumentationFile determines which documentation file to update
+func selectDocumentationFile(cmd *cobra.Command, packageRoot string, nonInteractive bool) (string, error) {
+	// Check if --doc-file flag was provided
+	docFile, err := cmd.Flags().GetString("doc-file")
+	if err != nil {
+		return "", fmt.Errorf("failed to get doc-file flag: %w", err)
+	}
+
+	// If flag is provided, validate and use it
+	if docFile != "" {
+		// Validate it's a .md file
+		if filepath.Ext(docFile) != ".md" {
+			return "", fmt.Errorf("doc-file must be a .md file, got: %s", docFile)
+		}
+		// Validate it's just a filename, not a path
+		if filepath.Base(docFile) != docFile {
+			return "", fmt.Errorf("doc-file must be a filename only (no path), got: %s", docFile)
+		}
+		return docFile, nil
+	}
+
+	// Discover available markdown files
+	mdFiles, err := discoverDocumentationFiles(packageRoot)
+	if err != nil {
+		return "", err
+	}
+
+	// If only one file or non-interactive mode, use README.md (default)
+	if len(mdFiles) == 1 || nonInteractive {
+		return "README.md", nil
+	}
+
+	// Interactive mode with multiple files: prompt user to select
+	selectPrompt := tui.NewSelect("Which documentation file would you like to update?", mdFiles, "README.md")
+
+	var selectedFile string
+	err = tui.AskOne(selectPrompt, &selectedFile)
+	if err != nil {
+		return "", fmt.Errorf("file selection failed: %w", err)
+	}
+
+	return selectedFile, nil
 }
 
 func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
@@ -103,7 +197,7 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 		cmd.Println(tui.Warning("AI agent is not available (no LLM provider API key set)."))
 		cmd.Println()
 		cmd.Println(tui.Info("To update the documentation manually:"))
-		cmd.Println(tui.Info("  1. Edit `_dev/build/docs/README.md`. Please follow the documentation guidelines from https://www.elastic.co/docs/extend/integrations/documentation-guidelines."))
+		cmd.Println(tui.Info("  1. Edit markdown files in `_dev/build/docs/` (e.g., README.md). Please follow the documentation guidelines from https://www.elastic.co/docs/extend/integrations/documentation-guidelines."))
 		cmd.Println(tui.Info("  2. Run `elastic-package build`"))
 		cmd.Println()
 		cmd.Println(tui.Info("For AI-powered documentation updates, configure one of these LLM providers:"))
@@ -113,6 +207,16 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 		cmd.Println()
 		cmd.Println(tui.Info("Profile configuration: ~/.elastic-package/profiles/<profile>/config.yml"))
 		return nil
+	}
+
+	// Select which documentation file to update
+	targetDocFile, err := selectDocumentationFile(cmd, packageRoot, nonInteractive)
+	if err != nil {
+		return fmt.Errorf("failed to select documentation file: %w", err)
+	}
+
+	if !nonInteractive && targetDocFile != "README.md" {
+		cmd.Printf("Selected documentation file: %s\n", targetDocFile)
 	}
 
 	// Determine the mode (rewrite or modify)
@@ -186,7 +290,7 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create the documentation agent
-	docAgent, err := llmagent.NewDocumentationAgent(provider, packageRoot, profile)
+	docAgent, err := llmagent.NewDocumentationAgent(provider, packageRoot, targetDocFile, profile)
 	if err != nil {
 		return fmt.Errorf("failed to create documentation agent: %w", err)
 	}
