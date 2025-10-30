@@ -22,13 +22,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var (
-	// The embedded example_readme is an example of a high-quality integration readme, following the static template archetype,
-	// which will help the LLM follow an example.
-	//
-	//go:embed _static/example_readme.md
-	exampleReadmeContent string
+// The embedded example_readme is an example of a high-quality integration readme, following the static template archetype,
+// which will help the LLM follow an example.
+//
+//go:embed _static/example_readme.md
+var exampleReadmeContent string
 
+var (
 	// should these be done per-tool?
 	ctx       = context.Background()
 	transport mcp.Transport
@@ -53,7 +53,6 @@ type MCPJson struct {
 
 // need an MCP struct that holds an array of close functions and also an array of tools
 func (s *MCPServer) Connect() error {
-
 	ctx := context.Background()
 	var transport mcp.Transport
 
@@ -70,18 +69,6 @@ func (s *MCPServer) Connect() error {
 
 	s.session = cs
 
-	// unmarshal the mcp file into a map of new servers
-	// {
-	//   "mcpServers": {
-	//     "name": {
-	//       "url": "http://localhost:8080",
-	//       "headers": {
-	//         "Authorization": "Bearer YOUR_GITHUB_PAT"
-	//       }
-	//     }
-	//   }
-	// }
-
 	// type ToolHandler func(ctx context.Context, arguments string) (*ToolResult, error)
 	// need to iterate over the tools and then return those
 	if (*s.session).InitializeResult().Capabilities.Tools != nil {
@@ -91,8 +78,6 @@ func (s *MCPServer) Connect() error {
 			}
 
 			// pull out the properties and required
-			//
-
 			required := feat.InputSchema.(map[string]any)["required"]
 			if required == nil {
 				required = []string{}
@@ -112,7 +97,6 @@ func (s *MCPServer) Connect() error {
 					myCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 					defer cancel()
 					res, err := s.session.CallTool(myCtx, &mcp.CallToolParams{Name: feat.Name, Arguments: json.RawMessage(arguments)})
-
 					if err != nil {
 						fmt.Printf("failed to call tool with error %v", err)
 						return nil, err
@@ -165,7 +149,6 @@ func MCPTools() *MCPJson {
 			err = value.Connect()
 			mcpJson.Servers[key] = value
 		}
-
 	}
 
 	return &mcpJson

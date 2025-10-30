@@ -105,20 +105,21 @@ type DocumentationAgent struct {
 	originalReadmeContent *string // Stores original content for restoration on cancel
 }
 
+// NewDocumentationAgent creates a new documentation agent
 func NewDocumentationAgent(provider LLMProvider, packageRoot string, targetDocFile string, profile *profile.Profile) (*DocumentationAgent, error) {
 	// Create tools for package operations
-	tools = append(tools, PackageTools(packageRoot)...)
+	tools := PackageTools(packageRoot)
 
-  // Load the mcp file
+	// Load the mcp file
 	servers := MCPTools()
 	if servers != nil {
 		for _, srv := range servers.Servers {
 			if len(srv.Tools) > 0 {
 				tools = append(tools, srv.Tools...)
 			}
-    }
-  }
-    
+		}
+	}
+
 	// Create the agent
 	agent := NewAgent(provider, tools)
 
@@ -484,7 +485,6 @@ func (d *DocumentationAgent) handleRequestChanges() (string, bool, bool, error) 
 
 // buildInitialPrompt creates the initial prompt for the LLM
 func (d *DocumentationAgent) buildInitialPrompt(manifest *packages.PackageManifest) string {
-
 	promptContent := loadPromptFile("initial_prompt.txt", initialPrompt, d.profile)
 	basePrompt := fmt.Sprintf(promptContent,
 		d.targetDocFile, // Line 5: file path in task description

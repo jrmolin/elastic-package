@@ -52,7 +52,6 @@ func NewLocationManager() (*LocationManager, error) {
 	}
 
 	return &LocationManager{stackPath: cfg}, nil
-
 }
 
 // RootDir returns the root elastic-package dir
@@ -100,14 +99,14 @@ func (loc LocationManager) CacheDir(name string) string {
 	return filepath.Join(loc.stackPath, cacheDir, name)
 }
 
-// Llm returns the directory with the LLM configuration
-func (loc LocationManager) LlmDir() string {
+// LLMDir returns the directory with the LLM configuration
+func (loc LocationManager) LLMDir() string {
 	return filepath.Join(loc.stackPath, llm)
 }
 
 // MCPJson returns the file location for the MCP server configuration
 func (loc LocationManager) MCPJson() string {
-	return filepath.Join(loc.LlmDir(), mcpJson)
+	return filepath.Join(loc.LLMDir(), mcpJson)
 }
 
 // configurationDir returns the configuration directory location
