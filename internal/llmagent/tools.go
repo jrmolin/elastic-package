@@ -311,8 +311,9 @@ func readFileHandler(packageRoot string) ToolHandler {
 			return &ToolResult{Error: fmt.Sprintf("failed to parse arguments: %v", err)}, nil
 		}
 
-		// Block access to generated artifacts in docs/ directory (tool should only work with the template README)
-		if strings.HasPrefix(args.Path, "docs/") {
+		// Block access to generated artifacts in docs/ directory, except docs/knowledge_base/
+		// which contains authoritative service information
+		if strings.HasPrefix(args.Path, "docs/") && !strings.HasPrefix(args.Path, "docs/knowledge_base/") {
 			return &ToolResult{Error: "access denied: invalid path"}, nil
 		}
 

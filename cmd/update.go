@@ -26,6 +26,7 @@ func setupUpdateCommand() *cobraext.Command {
 		RunE:  updateDocumentationCommandAction,
 	}
 	updateDocumentationCmd.Flags().Bool("non-interactive", false, "run in non-interactive mode, accepting the first result from the LLM")
+	updateDocumentationCmd.Flags().String("modify-prompt", "", "modification instructions for targeted documentation changes (skips full rewrite)")
 
 	cmd := &cobra.Command{
 		Use:   "update",

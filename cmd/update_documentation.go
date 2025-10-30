@@ -20,22 +20,25 @@ import (
 
 const updateDocumentationLongDescription = `Use this command to update package documentation using an AI agent or to get manual instructions for update.
 
-The AI agent will:
-1. Analyze your package structure, data streams, and configuration
-2. Generate comprehensive documentation following Elastic's templates
-3. Allow you to review and request changes interactively (or automatically accept in non-interactive mode)
-4. Create or update the README.md file in /_dev/build/docs/
+The AI agent supports two modes:
+1. Rewrite mode (default): Full documentation regeneration
+   - Analyzes your package structure, data streams, and configuration
+   - Generates comprehensive documentation following Elastic's templates
+   - Creates or updates the README.md file in /_dev/build/docs/
+2. Modify mode: Targeted documentation changes
+   - Makes specific changes to existing documentation
+   - Requires existing README.md file at /_dev/build/docs/README.md
+   - Use --modify-prompt flag for non-interactive modifications
 
-After the AI agent has generated updated documentation, you will be able to review it, and optionally, provide additional prompts that will be given
-to the AI agent to request changes to the generated documentation.
+Interactive workflow:
+After confirming you want to use the AI agent, you'll choose between rewrite or modify mode.
+You can review results and request additional changes iteratively.
 
+Non-interactive mode:
 Use --non-interactive to skip all prompts and automatically accept the first result from the LLM.
+Combine with --modify-prompt "instructions" for targeted non-interactive changes.
 
 If no LLM provider is configured, this command will print instructions for updating the documentation manually.
-
-The command supports multiple LLM providers and will automatically use the first available provider based on 
-environment variables or profile configuration. It analyzes your package and updates the /_dev/build/docs/README.md file with comprehensive 
-documentation based on the package contents and structure.
 
 Configuration options for LLM providers (environment variables or profile config):
 - BEDROCK_API_KEY / llm.bedrock.api_key: API key for Amazon Bedrock
@@ -45,7 +48,8 @@ Configuration options for LLM providers (environment variables or profile config
 - GEMINI_MODEL / llm.gemini.model: Model ID (defaults to gemini-2.5-pro)
 - LOCAL_LLM_ENDPOINT / llm.local.endpoint: Endpoint for local LLM server
 - LOCAL_LLM_MODEL / llm.local.model: Model name for local LLM (defaults to llama2)
-- LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional)`
+- LOCAL_LLM_API_KEY / llm.local.api_key: API key for local LLM (optional)
+- LLM_EXTERNAL_PROMPTS / llm.external_prompts: Enable external prompt files (defaults to false)`
 
 // getConfigValue retrieves a configuration value with fallback from environment variable to profile config
 func getConfigValue(profile *profile.Profile, envVar, configKey, defaultValue string) string {
@@ -77,6 +81,12 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get non-interactive flag: %w", err)
 	}
 
+	// Check for modify-prompt flag
+	modifyPrompt, err := cmd.Flags().GetString("modify-prompt")
+	if err != nil {
+		return fmt.Errorf("failed to get modify-prompt flag: %w", err)
+	}
+
 	// Get profile for configuration access
 	profile, err := cobraext.GetProfileFlag(cmd)
 	if err != nil {
@@ -105,6 +115,9 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Determine the mode (rewrite or modify)
+	useModifyMode := modifyPrompt != ""
+
 	// Skip confirmation prompt in non-interactive mode
 	if !nonInteractive {
 		// Prompt user for confirmation
@@ -119,6 +132,22 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 		if !confirm {
 			cmd.Println("Documentation update cancelled.")
 			return nil
+		}
+
+		// If no modify-prompt flag was provided, ask user to choose mode
+		if modifyPrompt == "" {
+			modePrompt := tui.NewSelect("Do you want to rewrite or modify the documentation?", []string{
+				"Rewrite (full regeneration)",
+				"Modify (targeted changes)",
+			}, "Rewrite (full regeneration)")
+
+			var mode string
+			err = tui.AskOne(modePrompt, &mode)
+			if err != nil {
+				return fmt.Errorf("prompt failed: %w", err)
+			}
+
+			useModifyMode = mode == "Modify (targeted changes)"
 		}
 	} else {
 		cmd.Println("Running in non-interactive mode - proceeding automatically.")
@@ -157,15 +186,22 @@ func updateDocumentationCommandAction(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create the documentation agent
-	docAgent, err := llmagent.NewDocumentationAgent(provider, packageRoot)
+	docAgent, err := llmagent.NewDocumentationAgent(provider, packageRoot, profile)
 	if err != nil {
 		return fmt.Errorf("failed to create documentation agent: %w", err)
 	}
 
-	// Run the documentation update process
-	err = docAgent.UpdateDocumentation(cmd.Context(), nonInteractive)
-	if err != nil {
-		return fmt.Errorf("documentation update failed: %w", err)
+	// Run the documentation update process based on selected mode
+	if useModifyMode {
+		err = docAgent.ModifyDocumentation(cmd.Context(), nonInteractive, modifyPrompt)
+		if err != nil {
+			return fmt.Errorf("documentation modification failed: %w", err)
+		}
+	} else {
+		err = docAgent.UpdateDocumentation(cmd.Context(), nonInteractive)
+		if err != nil {
+			return fmt.Errorf("documentation update failed: %w", err)
+		}
 	}
 
 	cmd.Println("Done")
