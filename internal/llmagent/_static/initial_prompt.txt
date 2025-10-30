@@ -14,7 +14,7 @@ Generate or update the _dev/build/docs/%s file for the integration specified bel
 Critical Directives (Follow These Strictly):
 
 1.  File Restriction: You MUST ONLY write to the _dev/build/docs/%s file. Do not modify any other files.
-2.  Preserve Human Content: You MUST preserve any content between <!-- HUMAN-EDITED START --> and <!-- HUMAN-EDITED END --> comment blocks. This content is non-negotiable and must be kept verbatim in its original position.
+2.  Preserv Content: You MUST preserve any content between <!-- PRESERVE START --> and <!-- PRESERVE END --> comment blocks. This content is non-negotiable and must be kept verbatim in its original position.
 3.  No Hallucination: If you cannot find a piece of information in the package files or through web search, DO NOT invent it. Instead, insert a clear placeholder in the document: << INFORMATION NOT AVAILABLE - PLEASE UPDATE >>.
 
 Available Tools (Use These for All Operations):

@@ -656,11 +656,16 @@ The AI agent supports two modes:
 1. Rewrite mode (default): Full documentation regeneration
    - Analyzes your package structure, data streams, and configuration
    - Generates comprehensive documentation following Elastic's templates
-   - Creates or updates the README.md file in /_dev/build/docs/
+   - Creates or updates markdown files in /_dev/build/docs/
 2. Modify mode: Targeted documentation changes
    - Makes specific changes to existing documentation
-   - Requires existing README.md file at /_dev/build/docs/README.md
+   - Requires existing documentation file at /_dev/build/docs/
    - Use --modify-prompt flag for non-interactive modifications
+
+Multi-file support:
+   - Use --doc-file to specify which markdown file to update (defaults to README.md)
+   - In interactive mode, you'll be prompted to select from available files
+   - Supports packages with multiple documentation files (e.g., README.md, vpc.md, etc.)
 
 Interactive workflow:
 After confirming you want to use the AI agent, you'll choose between rewrite or modify mode.
@@ -812,14 +817,6 @@ elastic-package update documentation --profile production
 **Preserving Human-Edited Content:**
 
 Manually edited sections can be preserved by wrapping them with HTML comment markers:
-
-```html
-<!-- HUMAN-EDITED START -->
-Your custom content here that should not be modified by AI
-<!-- HUMAN-EDITED END -->
-```
-
-Or alternatively:
 
 ```html
 <!-- PRESERVE START -->

@@ -787,7 +787,6 @@ func (d *DocumentationAgent) extractPreservedSections(content string) map[string
 		start, end string
 		name       string
 	}{
-		{"<!-- HUMAN-EDITED START -->", "<!-- HUMAN-EDITED END -->", "HUMAN-EDITED"},
 		{"<!-- PRESERVE START -->", "<!-- PRESERVE END -->", "PRESERVE"},
 	}
 
