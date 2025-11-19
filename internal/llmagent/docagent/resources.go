@@ -14,3 +14,6 @@ var RevisionPrompt string
 
 //go:embed _static/limit_hit_prompt.txt
 var LimitHitPrompt string
+
+//go:embed _static/verification_prompt.txt
+var VerificationPrompt string
