@@ -21,6 +21,7 @@ const (
 	promptFileRevision = "revision_prompt.txt"
 	promptFileLimitHit = "limit_hit_prompt.txt"
 	promptFileVerification = "verification_prompt.txt"
+	promptFileServiceInfo = "service_info_prompt.txt"
 )
 
 type PromptType int
@@ -30,6 +31,7 @@ const (
 	PromptTypeRevision
 	PromptTypeSectionBased
 	PromptTypeVerification
+	PromptTypeServiceInfo
 )
 
 // loadPromptFile loads a prompt file from external location if enabled, otherwise uses embedded content
@@ -109,6 +111,10 @@ func (d *DocumentationAgent) buildPrompt(promptType PromptType, ctx PromptContex
 		promptFile = promptFileVerification
 		embeddedContent = VerificationPrompt
 		formatArgs = d.buildVerificationPromptArgs(ctx)
+	case PromptTypeServiceInfo:
+		promptFile = promptFileServiceInfo
+		embeddedContent = ServiceInfoPrompt
+		// no format args needed
 	}
 
 	promptContent := loadPromptFile(promptFile, embeddedContent, d.profile)

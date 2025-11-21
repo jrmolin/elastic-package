@@ -17,3 +17,6 @@ var LimitHitPrompt string
 
 //go:embed _static/verification_prompt.txt
 var VerificationPrompt string
+
+//go:embed _static/service_info_prompt.txt
+var ServiceInfoPrompt string
