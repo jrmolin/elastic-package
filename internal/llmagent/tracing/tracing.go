@@ -16,10 +16,13 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
+
+	adktelemetry "google.golang.org/adk/telemetry"
 )
 
 // Environment variable names for Phoenix configuration
@@ -203,14 +206,22 @@ func initTracer(ctx context.Context, cfg Config) error {
 		return err
 	}
 
+	// create span processor
+	spanprocessor := sdktrace.NewBatchSpanProcessor(exporter)
+	adktelemetry.RegisterSpanProcessor(spanprocessor)
+
 	// Create tracer provider
 	globalProvider = sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSpanProcessor(spanprocessor),
 		sdktrace.WithResource(res),
 	)
 
 	// Set as global provider
 	otel.SetTracerProvider(globalProvider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 	globalTracer = globalProvider.Tracer(TracerName)
 
 	return nil
@@ -288,20 +299,21 @@ func StartSessionSpan(ctx context.Context, sessionName string, modelID string) (
 	ctx = WithSessionID(ctx, sessionID)
 	ctx = withSessionTokens(ctx, &SessionTokens{})
 
-	ctx, span := Tracer().Start(ctx, sessionName,
+	runCtx, span := Tracer().Start(ctx, sessionName,
 		trace.WithAttributes(
 			attribute.String(AttrOpenInferenceSpanKind, SpanKindChain),
 			attribute.String(AttrSessionID, sessionID),
 			attribute.String(AttrLLMModelName, modelID),
 			attribute.String(AttrGenAIRequestModel, modelID),
 		),
-		trace.WithSpanKind(trace.SpanKindServer),
 	)
-	return ctx, span
+	return runCtx, span
 }
 
 // EndSessionSpan records the final session output and token counts, then ends the span.
 func EndSessionSpan(ctx context.Context, span trace.Span, output string) {
+	defer span.End()
+
 	// Record output
 	if output != "" {
 		span.SetAttributes(attribute.String(AttrOutputValue, output))
@@ -317,8 +329,6 @@ func EndSessionSpan(ctx context.Context, span trace.Span, output string) {
 		)
 		tokens.mu.Unlock()
 	}
-
-	span.End()
 }
 
 // RecordSessionInput records the input value on a session span.
@@ -369,6 +379,7 @@ func StartLLMSpan(ctx context.Context, name string, modelID string, inputMessage
 // EndLLMSpan records the LLM response and ends the span.
 // It also accumulates token counts to the session tracker if present in context.
 func EndLLMSpan(ctx context.Context, span trace.Span, outputMessages []Message, promptTokens, completionTokens int) {
+	defer span.End()
 	if len(outputMessages) > 0 {
 		if msgJSON, err := json.Marshal(outputMessages); err == nil {
 			span.SetAttributes(attribute.String(AttrLLMOutputMessages, string(msgJSON)))
@@ -388,8 +399,6 @@ func EndLLMSpan(ctx context.Context, span trace.Span, outputMessages []Message, 
 	if tokens := SessionTokensFromContext(ctx); tokens != nil {
 		tokens.Add(promptTokens, completionTokens)
 	}
-
-	span.End()
 }
 
 // StartToolSpan starts a new span for a tool call
@@ -411,6 +420,7 @@ func StartToolSpan(ctx context.Context, toolName string, parameters map[string]a
 
 // EndToolSpan records the tool output and ends the span
 func EndToolSpan(span trace.Span, output string, err error) {
+	defer span.End()
 	if output != "" {
 		span.SetAttributes(attribute.String(AttrToolOutput, output))
 		span.SetAttributes(attribute.String(AttrOutputValue, output))
@@ -418,7 +428,6 @@ func EndToolSpan(span trace.Span, output string, err error) {
 	if err != nil {
 		span.RecordError(err)
 	}
-	span.End()
 }
 
 // RecordInput records the input value on a span
